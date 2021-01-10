@@ -11,39 +11,42 @@ def f(x, a, h):
 def p2std(p):
     return 10000*np.exp(-p)
 
-# %%
+#%% md
+# # Generative Process
+# $$
+#   \dot{\mathbf{x}}(t) = f(\mathbf{x}(t), \alpha) =
+#       \left[\begin{array}{ccc} 0 & 1 & 0 \\ -\omega^2 & 0 & 0 \\ \alpha &0 &-1 \end{array}\right] \cdot \mathbf{x}(t) =
+#       \left[\begin{array}{c} x_1(t) \\ -\omega^2 x_0(t) \\ \alpha x_0(t) - x_2(t) \end{array}\right] \nonumber
+# $$
+# ## Initial conditions
+# $$
+# \mathbf{x}(0) = \left[ \begin{array}{c} x_0(0) \\ x_1(0) \\ x_2(0) \end{array} \right] = \left[ \begin{array}{c} 1 \\ 0 \\ \frac{ \alpha }{ \omega^2 +1 } \end{array} \right]
+# $$
+# ## Solution
+# $$
+# \mathbf{x}(t) =
+#   \left[ \begin{array}{c} x_0(t) \\ x_1(t) \\ x_2(t) \end{array} \right] =
+#   \left[ \begin{array}{c} \cos(\omega t) \\ - \omega \sin(\omega t) \\ \frac{ \alpha ( \cos (\omega t) + \omega \sin (\omega t) ) }{ \omega^2 + 1 } \end{array} \right]
+# $$
+#
+# From $x_2$ is extracted the proprioceptive sensory input
+# $$
+# s_0 (t) = x_2(t) + \mathcal{N}(s_0;0,\Sigma_{s_0}^{GP})
+# $$
 
+#%%
+p2std(9)
+class GP:                                                   # Generative Process Class
 
-class GP:
-    """ Generative process.
+    def __init__(self, dt=0.0005, omega2_GP=0.01, alpha=0.1):
 
-    Implementation of the generative process :
-
-    Attributes:
-        pi_s: (float) Precision of sensory probabilities.
-        pi_x: (float) Precision of hidden states probabilities.
-        h: (float) Integration step of hidden states dynamics.
-        gamma: (float) Attenuation factor of sensory prediction error.
-        mu_s: (float)  sensory channel (central value).
-        mu_x: (float) hidden state (central value).
-        dmu_x: (float) Change of  hidden state (central value).
-        da: (float) Increment of action
-        dt: (float) Integration step
-        omega_s: (float) Standard deviation of sensory states
-        omega_x: (float)  Standard deviation of inner states
-        a: (float) action
-    """
-
-    def __init__(self, dt=0.0005, freq=0.01, amp=0.1):
-
-        self.pi_s = 9
-        self.mu_x = np.array([1.,0.,amp*1])
-        self.mu_s = 1
-        self.omega_s = p2std(self.pi_s)
-        self.dt = dt
-        self.freq = freq
-        self.a = amp
-        self.t = 0
+        self.omega2 = omega2_GP                                         # Harmonic oscillator angular frequency (both x_0 and x_2)
+        self.a = alpha                                                  # Harmonic oscillator amplitude ()
+        self.x = np.array([1.,0., self.a/(self.omega2 + 1)])            # Vector x={x_0, x_1, x_2} initialized with his initial conditions
+        self.s = self.a/(self.omega2 + 1)                               # Proprioceptive sensory input initialized with the real value (x_2)
+        self.Sigma_s = 1                                                # Variance of the Gaussian noise that gives proprioceptive sensory input
+        self.dt = dt                                                    # Size of a simulation step
+        self.t = 0                                                      # Time variable
 
     def update(self, action):
         """ Update dynamics of the process.
@@ -54,14 +57,14 @@ class GP:
         """
 
         self.a += self.dt*action
-        self.mu_x[0] += self.dt*(self.freq*self.mu_x[1])
-        self.mu_x[1] += self.dt*(-self.mu_x[0])
+        self.mu_x[0] += self.dt*(self.mu_x[1])
+        self.mu_x[1] += self.dt*(-self.freq*self.mu_x[0])
         self.mu_x[2] += self.dt*(self.a*self.mu_x[0] - self.mu_x[2])
         self.s = self.mu_x[2] + self.omega_s*rng.randn()
 
         return self.s
 
-a_touch = 10.0
+#%%
 class GM:
     """ Generative Model.
 
