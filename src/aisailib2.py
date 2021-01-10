@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from mpmath import sech, tanh
-rng = np.random.RandomState()
+rng = np.random.RandomState(42)
 
 
 def f(x, a, h):
@@ -11,6 +11,7 @@ def f(x, a, h):
 def p2std(p):
     return 10000*np.exp(-p)
 
+p2std(9)
 #%% md
 # # Generative Process
 # $$
@@ -35,10 +36,9 @@ def p2std(p):
 # $$
 
 #%%
-p2std(9)
 class GP:                                                               # Generative Process Class
 
-    def __init__(self, dt=0.0005, omega2_GP=0.01, alpha=0.1):
+    def __init__(self, dt, omega2_GP=0.5, alpha=2):
 
         self.omega2 = omega2_GP                                         # Harmonic oscillator angular frequency (both x_0 and x_2)
         self.a = alpha                                                  # Harmonic oscillator amplitude ()
@@ -49,8 +49,8 @@ class GP:                                                               # Genera
         self.dt = dt                                                    # Size of a simulation step
         self.t = 0                                                      # Time variable
         self.platform_position = 0.5                                    # Platform position (when is present) with respect to x_2 variable
-        self.platform_interval = [30000, 150000]                        # Time interval in which the platform appears
-        self.
+        self.platform_interval = [15, 75]                               # Time interval in which the platform appears
+
 
     def update(self, action):                                           # Function that implement dynamics of the process.
                                                                         # Action argument (double) is the variable that comes from the GM that modifies alpha
@@ -58,20 +58,34 @@ class GP:                                                               # Genera
 
         self.t += dt                                                    # Increment of time variable
         self.a += self.dt*action                                        # Increment of alpha variable (that changes the amplitude) given by agent's action
-        self.x[0] += self.dt*(self.mu_x[1])                             # GP dynamics implementation
-        self.x[1] += self.dt*(-self.omega2*self.mu_x[0])
-        self.x[2] += self.dt*(self.a*self.mu_x[0] - self.mu_x[2])
+        self.x[0] += self.dt*(self.x[1])                                # GP dynamics implementation
+        self.x[1] += self.dt*(-self.omega2*self.x[0])
+        self.x[2] += self.dt*(self.a*self.x[0] - self.x[2])
         if self.t in self.platform_interval:                            # Platform Action
-            if self.x[2] > platform_position:
+            if self.x[2] > self.platform_position:
                 self.s[1] = 1.
-                self.x[2] = platform_position
+                self.x[2] = self.platform_position
             else:
                 self.s[0] = 0.
         else:
             self.s[1] = 0.
         self.s[0] = self.x[2] + self.Sigma_s*rng.randn()
 
+    def platform_for_graph(self):
+        plat = []
+        for t in np.arange(0.,self.t,self.dt):
+            if t in self.platform_interval:
+                plat.append([t, self.platform_position])
+        return np.vstack(plat)
 
+
+
+#%% md
+# # Generative Model
+# $$
+# f(\mu(t), \nu) =
+#       \left[\begin{array}{ccc} 0 & 1 & 0 \\ -\omega^2 & 0 & 0 \\ \nu & 0 & -1 \end{array} \right] \cdot \mu(t)
+# $$
 #%%
 class GM:
     """ Generative Model.
@@ -95,7 +109,7 @@ class GM:
 
     """
 
-    def __init__(self, dt=0.0005, eta=0.0005, eta_d=1000,
+    def __init__(self, dt, eta=0.0005, eta_d=1000,
                  freq=0.001, amp=np.pi/2):
 
         self.pi_s = np.array([9,9])
@@ -171,11 +185,28 @@ class GM:
         self.nu += self.dt*self.gd_a
         return self.gd_a
 
+#%%
 
 if __name__ == "__main__":
+    dt = 0.0005
+    n_steps = 200000
+    gp = GP(dt=dt)
+    #gm = GM(dt=0.0005, eta=0.1, freq=0.5, amp=1)
 
-    gp = GP(dt=0.0005, freq=0.5, amp=1)
-    gm = GM(dt=0.0005, eta=0.1, freq=0.5, amp=1)
+#%%
+    data = []
+    a = 0.
+    for step in np.arange(n_steps):
+        gp.update(a)
+        data.append([gp.x[2], gp.a])
+    data = np.vstack(data)
+    platform = gp.platform_for_graph()
+
+    plt.figure(figsize=(10, 6))
+    plt.subplot(111)
+    plt.plot(np.arange(0,n_steps*dt,dt), data[:, 0], c="red", lw=1, ls="dashed")
+    plt.plot(np.arange(0,n_steps*dt,dt), data[:, 1], c="#aa6666", lw=3)
+    plt.plot(platform[:,0], platform[:,1], c="black", lw=0.5)
 
     # %%
     data = []
