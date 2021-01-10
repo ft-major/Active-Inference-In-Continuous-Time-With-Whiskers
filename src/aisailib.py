@@ -37,9 +37,9 @@ class GP:
     def __init__(self, dt=0.0005, freq=0.01, amp=0.1):
 
         self.pi_s = 9
-        self.mu_x = np.array([1.,0.,amp*1])
+        self.mu_x = np.array([1.,0.,amp/(freq+1)])
         self.mu_s = 1
-        self.omega_s = p2std(self.pi_s)
+        self.omega_s = 1#p2std(self.pi_s)
         self.dt = dt
         self.freq = freq
         self.a = amp
@@ -89,10 +89,10 @@ class GM:
 
         self.pi_s = np.array([9,9])
         self.pi_x = np.array([9,9,9])
-        self.omega_s = p2std(self.pi_s)
-        self.omega_x = p2std(self.pi_x)
+        self.omega_s = np.array([1.,1.]) #p2std(self.pi_s)
+        self.omega_x = np.array([1.,1.,1.]) #p2std(self.pi_x)
 
-        self.mu_x = np.array([1.,0.,amp*1])
+        self.mu_x = np.array([1.,0.,amp/(freq+1)])
         self.dmu_x = np.array([0.,-1/freq,0.])
         self.nu = amp
 

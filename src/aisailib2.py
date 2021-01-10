@@ -36,33 +36,41 @@ def p2std(p):
 
 #%%
 p2std(9)
-class GP:                                                   # Generative Process Class
+class GP:                                                               # Generative Process Class
 
     def __init__(self, dt=0.0005, omega2_GP=0.01, alpha=0.1):
 
         self.omega2 = omega2_GP                                         # Harmonic oscillator angular frequency (both x_0 and x_2)
         self.a = alpha                                                  # Harmonic oscillator amplitude ()
         self.x = np.array([1.,0., self.a/(self.omega2 + 1)])            # Vector x={x_0, x_1, x_2} initialized with his initial conditions
-        self.s = self.a/(self.omega2 + 1)                               # Proprioceptive sensory input initialized with the real value (x_2)
+        self.s = np.array([self.a/(self.omega2 + 1), 0.])               # Array storing respectively proprioceptive sensory input (initialized with the real
+                                                                        # value x_2) and touch sensory input
         self.Sigma_s = 1                                                # Variance of the Gaussian noise that gives proprioceptive sensory input
         self.dt = dt                                                    # Size of a simulation step
         self.t = 0                                                      # Time variable
+        self.platform_position = 0.5                                    # Platform position (when is present) with respect to x_2 variable
+        self.platform_interval = [30000, 150000]                        # Time interval in which the platform appears
+        self.
 
-    def update(self, action):
-        """ Update dynamics of the process.
+    def update(self, action):                                           # Function that implement dynamics of the process.
+                                                                        # Action argument (double) is the variable that comes from the GM that modifies alpha
+                                                                        # variable affecting the amplitude of the oscillation.
 
-        Args:
-            action: (float) moves the current inner state.
+        self.t += dt                                                    # Increment of time variable
+        self.a += self.dt*action                                        # Increment of alpha variable (that changes the amplitude) given by agent's action
+        self.x[0] += self.dt*(self.mu_x[1])                             # GP dynamics implementation
+        self.x[1] += self.dt*(-self.omega2*self.mu_x[0])
+        self.x[2] += self.dt*(self.a*self.mu_x[0] - self.mu_x[2])
+        if self.t in self.platform_interval:                            # Platform Action
+            if self.x[2] > platform_position:
+                self.s[1] = 1.
+                self.x[2] = platform_position
+            else:
+                self.s[0] = 0.
+        else:
+            self.s[1] = 0.
+        self.s[0] = self.x[2] + self.Sigma_s*rng.randn()
 
-        """
-
-        self.a += self.dt*action
-        self.mu_x[0] += self.dt*(self.mu_x[1])
-        self.mu_x[1] += self.dt*(-self.freq*self.mu_x[0])
-        self.mu_x[2] += self.dt*(self.a*self.mu_x[0] - self.mu_x[2])
-        self.s = self.mu_x[2] + self.omega_s*rng.randn()
-
-        return self.s
 
 #%%
 class GM:
