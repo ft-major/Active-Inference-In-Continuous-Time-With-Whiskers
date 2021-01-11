@@ -69,8 +69,9 @@ class GP:                                                               # Genera
             if self.x[2] > self.platform_position:
                 self.s[1] = 1.
                 self.x[2] = self.platform_position
+                print(self.x[2])
             else:
-                self.s[0] = 0.
+                self.s[1] = 0.
         else:
             self.s[1] = 0.
         self.s[0] = self.x[2] + self.Sigma_s*rng.randn()
@@ -176,17 +177,17 @@ class GP:                                                               # Genera
 # $$
 # with
 # $$
-# \frac{ \partial F }{ \partial \nu } = - \mu_0 \frac{ \varepsilon_{\mu_2} }{ \Sigma_{mu_2} } - \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} }\frac{ \partial g(\vec{\mu}, \nu) }{ \partial \nu  } =
-#   - \mu_0 \frac{ \varepsilon_{\mu_2} }{ \Sigma_{mu_2} } - \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} } \left[ -10 \, \mu_0 \, \text{sech}\left(10 (\nu \mu_0 - \mu_2)\right) \, \text{tanh}\left(10 (\nu \mu_0 - \mu_2)\right) \, \left( \frac{ 1 }{ 2 }\text{tanh}(10 \mu_2) + \frac{ 1 }{ 2 } \right) \right]
+# \frac{ \partial F }{ \partial \nu } = - \mu_0 \frac{ \varepsilon_{\mu_2} }{ \Sigma_{\mu_2} } - \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} }\frac{ \partial g(\vec{\mu}, \nu) }{ \partial \nu  } =
+#   - \mu_0 \frac{ \varepsilon_{\mu_2} }{ \Sigma_{\mu_2} } - \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} } \left[ -10 \, \mu_0 \, \text{sech}\left(10 (\nu \mu_0 - \mu_2)\right) \, \text{tanh}\left(10 (\nu \mu_0 - \mu_2)\right) \, \left( \frac{ 1 }{ 2 }\text{tanh}(10 \mu_2) + \frac{ 1 }{ 2 } \right) \right]
 # $$
 #%%
 class GM:
 
-    def __init__(self, dt, eta=0.0005, eta_d=1000, eta_a=0.001, eta_nu=0.001, omega2_GM=0.5, nu=1):
+    def __init__(self, dt, eta=0.005, eta_d=100, eta_a=100, eta_nu=0.001, omega2_GM=0.5, nu=1):
 
         self.omega2 = omega2_GM                                         # Harmonic oscillator angular frequency
         self.nu = nu                                                    # Harmonic oscillator amplitude (no really)
-        self.mu = np.array([1.,0., self.a/(self.omega2+1)])             # Vector \vec{\mu}={\mu_0, \mu_1, \mu_2} initialized with the GP initial conditions
+        self.mu = np.array([1.,0., self.nu/(self.omega2+1)])             # Vector \vec{\mu}={\mu_0, \mu_1, \mu_2} initialized with the GP initial conditions
         self.dmu = np.array([0.,-self.omega2, (self.nu*self.mu[0]-self.mu[2])])
                                                                         # Vector \dot{\vec{\mu}}={\dot{\mu_0}, \dot{\mu_1}, \dot{\mu_2}} inizialized with the right ones
         self.Sigma_s = np.array([1.,1.])                                # Variances (inverse of precisions) of sensory input (the first one proprioceptive and the second one touch)
@@ -195,13 +196,13 @@ class GM:
         self.dt = dt                                                    # Size of a simulation step
         self.eta = np.array([eta, eta_d, eta_a, eta_nu])                        # Gradient descent weights
 
-    def g_touch(self, prec=10, x, v):                                   # Touch function
+    def g_touch(self, x, v, prec=10):                                   # Touch function
         return sech(prec*v)*(0.5*tanh(prec*x)+0.5)
 
-    def dg_dmu0(self, prec=10, x, v, dv_dmu0):                          # Derivative of the touch function with respect to \mu_0
+    def dg_dmu0(self, x, v, dv_dmu0, prec=10):                          # Derivative of the touch function with respect to \mu_0
         return -prec*dv_dmu0*sech(prec*v)*tanh(prec*v)*(0.5 * tanh(prec*x) + 0.5)
 
-    def dg_dmu2(self, prec=10, x, v, dx_dmu2=1, dv_dmu2=-1):            # Derivative of the touch function with respect to \mu_2
+    def dg_dmu2(self, x, v, prec=10, dx_dmu2=1, dv_dmu2=-1):            # Derivative of the touch function with respect to \mu_2
         return -prec*dv_dmu2*sech(prec*v)*tanh(prec*v)*(0.5 * tanh(prec*x) + 0.5) + sech(prec*v)*5*dx_dmu2*(sech(prec*x))**2
 
     def update(self, sensory_states):                                   # Function that implement the update of internal variables.
@@ -212,11 +213,11 @@ class GM:
         self.s = sensory_states
         s = self.s
         S_mu, S_s = (self.Sigma_mu, self.Sigma_s)
-        mu = self.mu_x
-        dmu = self.dmu_x
+        mu = self.mu
+        dmu = self.dmu
         nu = self.nu
         om2 = self.omega2
-        eta, eta_d, eta_a, eta_nu = (self.eta[0], self.eta[1], selft.eta[2], selft.eta[3])
+        eta, eta_d, eta_a, eta_nu = (self.eta[0], self.eta[1], self.eta[2], self.eta[3])
         PE_mu = np.array([
             dmu[0]-mu[1],
             dmu[1]+om2*mu[0],
@@ -244,15 +245,15 @@ class GM:
         self.dmu += -self.dt*eta_d*dF_d_dmu
 
         # Action update
-        dF_da = (self.mu[0]-self.mu[1])/(om2+1)*PE_s[0]/S_s[0] + ( dg_dmu0(x=self.mu[2], v=(self.nu*self.mu[0]-self.mu[2]), dv_dmu0=self.mu[0]) ) * PE_s[1]/S_s[1]
+        dF_da = (self.mu[0]-self.mu[1])/(om2+1)*PE_s[0]/S_s[0] + ( self.dg_dmu0(x=self.mu[2], v=(self.nu*self.mu[0]-self.mu[2]), dv_dmu0=self.mu[0]) ) * PE_s[1]/S_s[1]
         self.da = -self.dt*eta_a*dF_da
 
         # Learning internal parameter nu
-        dF_dnu = -self.mu[0]*PE_mu[2]/S_mu[2] - ( dg_dmu0(x=self.mu[2], v=(self.nu*self.mu[0]-self.mu[2]), dv_dmu0=self.mu[0]) ) * PE_s[1]/S_s[1]
+        dF_dnu = -self.mu[0]*PE_mu[2]/S_mu[2] - ( self.dg_dmu0(x=self.mu[2], v=(self.nu*self.mu[0]-self.mu[2]), dv_dmu0=self.mu[0]) ) * PE_s[1]/S_s[1]
         self.nu += -self.dt*eta_nu*dF_dnu
         # Efference copy
         #self.nu += self.dt*self.da
-        
+
         return self.da
 
 #%%
@@ -261,22 +262,28 @@ if __name__ == "__main__":
     dt = 0.0005
     n_steps = 200000
     gp = GP(dt=dt)
-    #gm = GM(dt=0.0005, eta=0.1, freq=0.5, amp=1)
+    gm = GM(dt=0.0005)
 
 #%%
     data = []
     a = 0.
     for step in np.arange(n_steps):
         gp.update(a)
-        data.append([gp.x[2], gp.a])
+        a=gm.update(gp.s)
+        data.append([gp.x[2], gp.a, gm.mu[2], gm.nu])
     data = np.vstack(data)
     platform = gp.platform_for_graph()
-
+#%%
     plt.figure(figsize=(10, 6))
-    plt.subplot(111)
+    plt.subplot(211)
     plt.plot(np.arange(0,n_steps*dt,dt), data[:, 0], c="red", lw=1, ls="dashed")
     plt.plot(np.arange(0,n_steps*dt,dt), data[:, 1], c="#aa6666", lw=3)
     plt.plot(platform[:,0], platform[:,1], c="black", lw=0.5)
+    plt.subplot(212)
+    plt.plot(np.arange(0,n_steps*dt,dt), data[:, 2], c="green", lw=1, ls="dashed")
+    plt.plot(np.arange(0,n_steps*dt,dt), data[:, 3], c="#66aa66", lw=3)
+    plt.plot(platform[:,0], platform[:,1], c="black", lw=0.5)
+    plt.show()
 
     # %%
     data = []
