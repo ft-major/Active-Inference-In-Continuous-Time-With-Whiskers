@@ -151,17 +151,17 @@ class GP:                                                               # Genera
 # $$
 # $$
 # \left[ \begin{matrix} \dot{\mu}_0(t+dt) \\ \dot{\mu}_1(t+dt) \\ \dot{\mu}_2(t+dt) \end{matrix} \right] =
-#	\left[ \begin{matrix} \dot{\mu}_0(t) + dt \, \eta_d \frac{ \partial F }{ \partial \dot{\mu}_0 } \\
-#						  \dot{\mu}_1(t) + dt \, \eta_d \frac{ \partial F }{ \partial \dot{\mu}_1 } \\
-#						  \dot{\mu}_2(t) + dt \, \eta_d \frac{ \partial F }{ \partial \dot{\mu}_2 }
+#	\left[ \begin{matrix} \dot{\mu}_0(t) - dt \, \eta_d \frac{ \partial F }{ \partial \dot{\mu}_0 } \\
+#						  \dot{\mu}_1(t) - dt \, \eta_d \frac{ \partial F }{ \partial \dot{\mu}_1 } \\
+#						  \dot{\mu}_2(t) - dt \, \eta_d \frac{ \partial F }{ \partial \dot{\mu}_2 }
 #	\end{matrix} \right]
 # $$
 # with $\eta$ and $\eta_d$ gradient descent parameters respectively of $\vec{\mu}$ and $\dot{\vec{\mu}}$
 # ## Action
 # the agent modifies a certain variable of the GP (in our case the alpha parameter) by a quantity given by
 # $$
-# a = \eta_a \left( \frac{ \partial F }{ \partial s_0 }\frac{ \partial s_0 }{ \partial \alpha  } + \frac{ \partial F }{ \partial s_1 }\frac{ \partial s_1 }{ \partial \alpha  } \right)
-#       = \eta_a \left( \frac{ \varepsilon_{s_0} }{ \Sigma_{s_0} }\frac{ \partial s_0 }{ \partial \alpha  } + \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} }\frac{ \partial s_1 }{ \partial \alpha  } \right)
+# a = dt \eta_a \left( \frac{ \partial F }{ \partial s_0 }\frac{ \partial s_0 }{ \partial \alpha  } + \frac{ \partial F }{ \partial s_1 }\frac{ \partial s_1 }{ \partial \alpha  } \right)
+#       = dt \eta_a \left( \frac{ \varepsilon_{s_0} }{ \Sigma_{s_0} }\frac{ \partial s_0 }{ \partial \alpha  } + \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} }\frac{ \partial s_1 }{ \partial \alpha  } \right)
 # $$
 # with
 # $$
@@ -170,10 +170,19 @@ class GP:                                                               # Genera
 # \frac{ \partial s_1 }{ \partial \alpha } &= ? = -10 \, x_0 \, \text{sech}\left(10 (\alpha x_0 - x_2)\right) \, \text{tanh}\left(10 (\alpha x_0 - x_2)\right) \, \left( \frac{ 1 }{ 2 }\text{tanh}(10 x_2) + \frac{ 1 }{ 2 } \right) \approx ? -10 \, \mu_0 \, \text{sech}\left(10 (\alpha \mu_0 - \mu_2)\right) \, \text{tanh}\left(10 (\alpha \mu_0 - \mu_2)\right) \, \left( \frac{ 1 }{ 2 }\text{tanh}(10 \mu_2) + \frac{ 1 }{ 2 } \right)
 # \end{align}
 # $$
+# ## Learning of the $\nu$ parameter
+# $$
+# \nu(t+dt) = \nu (t) - dt \eta_{\nu} \frac{ \partial F }{ \partial \nu }
+# $$
+# with
+# $$
+# \frac{ \partial F }{ \partial \nu } = - \mu_0 \frac{ \varepsilon_{\mu_2} }{ \Sigma_{mu_2} } - \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} }\frac{ \partial g(\vec{\mu}, \nu) }{ \partial \nu  } =
+#   - \mu_0 \frac{ \varepsilon_{\mu_2} }{ \Sigma_{mu_2} } - \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} } \left[ -10 \, \mu_0 \, \text{sech}\left(10 (\nu \mu_0 - \mu_2)\right) \, \text{tanh}\left(10 (\nu \mu_0 - \mu_2)\right) \, \left( \frac{ 1 }{ 2 }\text{tanh}(10 \mu_2) + \frac{ 1 }{ 2 } \right) \right]
+# $$
 #%%
 class GM:
 
-    def __init__(self, dt, eta=0.0005, eta_d=1000, eta_a=0.001, omega2_GM=0.5, nu=1):
+    def __init__(self, dt, eta=0.0005, eta_d=1000, eta_a=0.001, eta_nu=0.001, omega2_GM=0.5, nu=1):
 
         self.omega2 = omega2_GM                                         # Harmonic oscillator angular frequency
         self.nu = nu                                                    # Harmonic oscillator amplitude (no really)
@@ -184,7 +193,7 @@ class GM:
         self.Sigma_mu = np.array([1.,1.,1.])                            # Internal variables precisions
         self.da = 0                                                     # Action variable
         self.dt = dt                                                    # Size of a simulation step
-        self.eta = np.array([eta, eta_d, eta_a])                        # Gradient descent weights
+        self.eta = np.array([eta, eta_d, eta_a, eta_nu])                        # Gradient descent weights
 
     def g_touch(self, prec=10, x, v):                                   # Touch function
         return sech(prec*v)*(0.5*tanh(prec*x)+0.5)
@@ -200,14 +209,14 @@ class GM:
                                                                         # and somatosensory perception
                                                                         # Returns action increment
 
-        # update sensory states and dynamic precision
         self.s = sensory_states
         s = self.s
         S_mu, S_s = (self.Sigma_mu, self.Sigma_s)
         mu = self.mu_x
         dmu = self.dmu_x
         nu = self.nu
-        da, om2 = self.da, self.omega2
+        om2 = self.omega2
+        eta, eta_d, eta_a, eta_nu = (self.eta[0], self.eta[1], selft.eta[2], selft.eta[3])
         PE_mu = np.array([
             dmu[0]-mu[1],
             dmu[1]+om2*mu[0],
@@ -224,25 +233,27 @@ class GM:
             PE_mu[2]/S_mu[2] - PE_s[0]/S_s[0] - self.dg_dmu2(x=mu[2], v=(nu*mu[0]-mu[2]))*PE_s[1]/S_s[1]
             ])
 
-        self.gd_dmu_x = np.array([
-            -(1/omx[0])*(dmx[0] - fr*mx[1]),
-            -(1/omx[1])*(mx[0] + dmx[1]),
-            -(1/omx[2])*(dmx[2] - (n*mx[0] - mx[2]))])
+        dF_d_dmu = np.array([
+            PE_mu[0]/S_mu[0],
+            PE_mu[1]/S_mu[1],
+            PE_mu[2]/S_mu[2]
+            ])
 
-        self.touch = self.f_touch(mx[0],mx[1])
-        self.gd_nu = -(1/omx[2])*mx[0]*(n*mx[0] - mx[2] - dmx[2])
-        self.gd_a = (1/oms[0])*da*(s[0]-mx[2]) - (1/oms[1])*(s[1]-self.f_touch(mx[0],mx[1]))*da
+        # Internal variables update
+        self.mu += self.dt*(self.dmu - eta*dF_dmu)
+        self.dmu += -self.dt*eta_d*dF_d_dmu
 
-        # classic Active inference internal variables dynamics
-        eta_mu = self.eta
-        eta_dmu = self.eta_d
-        d_dmu_x = self.dt*( eta_dmu*self.gd_dmu_x )
-        self.mu_x = self.mu_x + self.dt*( self.dmu_x + eta_mu*self.gd_mu_x)
-        self.dmu_x = self.dmu_x + d_dmu_x
+        # Action update
+        dF_da = (self.mu[0]-self.mu[1])/(om2+1)*PE_s[0]/S_s[0] + ( dg_dmu0(x=self.mu[2], v=(self.nu*self.mu[0]-self.mu[2]), dv_dmu0=self.mu[0]) ) * PE_s[1]/S_s[1]
+        self.da = -self.dt*eta_a*dF_da
 
-
-        self.nu += self.dt*self.gd_a
-        return self.gd_a
+        # Learning internal parameter nu
+        dF_dnu = -self.mu[0]*PE_mu[2]/S_mu[2] - ( dg_dmu0(x=self.mu[2], v=(self.nu*self.mu[0]-self.mu[2]), dv_dmu0=self.mu[0]) ) * PE_s[1]/S_s[1]
+        self.nu += -self.dt*eta_nu*dF_dnu
+        # Efference copy
+        #self.nu += self.dt*self.da
+        
+        return self.da
 
 #%%
 
