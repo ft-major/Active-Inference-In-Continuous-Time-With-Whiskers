@@ -1,8 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from mpmath import sech, tanh
 rng = np.random.RandomState(42)
 
+def sech(x):
+    return 2/(np.exp(x)+np.exp(-x))
+
+def logistic(x):
+    return 1/(1+np.exp(-x))
 
 def f(x, a, h):
     return a - h*x + np.pi/2
@@ -15,17 +19,17 @@ p2std(9)
 #%% md
 # # Generative Process
 # $$
-#   \dot{\mathbf{x}}(t) = f(\mathbf{x}(t), \alpha) =
-#       \left[\begin{array}{ccc} 0 & 1 & 0 \\ -\omega^2 & 0 & 0 \\ \alpha &0 &-1 \end{array}\right] \cdot \mathbf{x}(t) =
+#   \dot{\vec{x}}(t) = f(\vec{x}(t), \alpha) =
+#       \left[\begin{array}{ccc} 0 & 1 & 0 \\ -\omega^2 & 0 & 0 \\ \alpha &0 &-1 \end{array}\right] \cdot \vec{x}(t) =
 #       \left[\begin{array}{c} x_1(t) \\ -\omega^2 x_0(t) \\ \alpha x_0(t) - x_2(t) \end{array}\right] \nonumber
 # $$
 # ## Initial conditions
 # $$
-# \mathbf{x}(0) = \left[ \begin{array}{c} x_0(0) \\ x_1(0) \\ x_2(0) \end{array} \right] = \left[ \begin{array}{c} 1 \\ 0 \\ \frac{ \alpha }{ \omega^2 +1 } \end{array} \right]
+# \vec{x}(0) = \left[ \begin{array}{c} x_0(0) \\ x_1(0) \\ x_2(0) \end{array} \right] = \left[ \begin{array}{c} 1 \\ 0 \\ \frac{ \alpha }{ \omega^2 +1 } \end{array} \right]
 # $$
 # ## Solution
 # $$
-# \mathbf{x}(t) =
+# \vec{x}(t) =
 #   \left[ \begin{array}{c} x_0(t) \\ x_1(t) \\ x_2(t) \end{array} \right] =
 #   \left[ \begin{array}{c} \cos(\omega t) \\ - \omega \sin(\omega t) \\ \frac{ \alpha ( \cos (\omega t) + \omega \sin (\omega t) ) }{ \omega^2 + 1 } \end{array} \right]
 # $$
@@ -82,10 +86,62 @@ class GP:                                                               # Genera
 
 #%% md
 # # Generative Model
+# ## Agent beliefs
 # $$
-# f(\mu(t), \nu) =
-#       \left[\begin{array}{ccc} 0 & 1 & 0 \\ -\omega^2 & 0 & 0 \\ \nu & 0 & -1 \end{array} \right] \cdot \mu(t)
+# \dot{\vec{\mu}}(t) = f_{dyn}(\vec{\mu}(t), \nu) + z_{\vec{\mu}}=
+#       \left[\begin{array}{ccc} 0 & 1 & 0 \\ -\omega^2 & 0 & 0 \\ \nu & 0 & -1 \end{array} \right] \cdot \vec{\mu}(t) + \mathcal{N}(\dot{\vec{\mu}}; 0, \hat{\Sigma}_{\vec{\mu}})
 # $$
+# with $\hat{\Sigma}_{\vec{\mu}}$ covariance matrix of the multidimensional gaussian noise. In our case it is a diagonal matrix with diagonal $\Sigma_{\mu_0}, \Sigma_{\mu_1}, \Sigma_{\mu_2}$
+# $$
+# s_p(\vec{\mu}(t), \nu) =
+#       \left[\begin{array}{c} 0 \\ 0 \\ 1 \end{array} \right]^T \cdot \vec{\mu}(t) + \mathcal{N}(s_p; 0, \Sigma_{s_0})
+# $$
+# $$
+# s_t(\vec{\mu}(t), \nu) = g(\vec{\mu}(t),\nu) + \mathcal{N}(s_t; 0, \Sigma_{s_1}) =
+#       g_1 \left( \left[\begin{array}{c} \nu \\ 0 \\ -1 \end{array} \right]^T \cdot \vec{\mu}(t) \right) g_2 \left( \left[\begin{array}{c} 0 \\ 0 \\ 1 \end{array} \right]^T \cdot \vec{\mu}(t) \right)
+#       + \mathcal{N}(s_t; 0, \Sigma_{s_1})
+# $$
+# with
+# $$
+# g_1(x) = \frac{ 2 }{ \pi }\text{arctan}\left( \frac{ 1 }{ (10 x)^2} \right) \\
+# g_2(x) = \frac{ 1 }{ \pi } \left( \text{arctan}(10 x)+\frac{\pi}{2} \right)
+# $$
+# for later is important to notice that
+# $$
+# \frac{ d g_1 }{ dx } = \frac{ 2 }{ \pi }\frac{ 1 }{ (10 x)^{-4} +1 }
+#%% md
+# ## Free Energy
+# $$
+# F \approx
+#   \frac{1}{2} \left[ \frac{(\dot{\mu_0}-\mu_1)^2}{\Sigma_{\mu_0}}
+#                       + \frac{(\dot{\mu_1}+ \omega^2 \mu_0)^2}{\Sigma_{\mu_1}}
+#                       + \frac{(\dot{\mu_2}-(\nu \mu_0 - \mu_2))^2}{\Sigma_{\mu_2}}
+#                       + \frac{(s_0-\mu_2)^2}{\Sigma_{s_0}}
+#                       + \frac{(s_1-g(\vec{\mu}, \nu))^2}{\Sigma_{s_1}} \right]
+# $$
+# ## Prediction errors
+# $$
+# \begin{align}
+# \varepsilon_{\mu_0} &= \dot{\mu_0}-\mu_1 \\
+# \varepsilon_{\mu_1} &= \dot{\mu_1}+ \omega^2 \mu_0 \\
+# \varepsilon_{\mu_2} &= \dot{\mu_2}-(\nu \mu_0 - \mu_2) \\
+# \varepsilon_{s_0} &= s_0-\mu_2 \\
+# \varepsilon_{s_1} &= s_1-g(\vec{\mu}, \nu)
+# \end{align}
+# $$
+#%% md
+# ## Gradients
+# $$
+# \begin{align}
+# \frac{ \partial F }{ \partial \mu_0 } &= \omega^2 \frac{ \varepsilon_{\mu_1} }{ \Sigma_{\mu_1} } - \nu \frac{ \varepsilon_{\mu_2} }{ \Sigma_{\mu_2} } - \frac{ \partial g(\vec{\mu}, \nu) }{ \partial \mu_0 } \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} }\\
+# \frac{ \partial F }{ \partial \mu_1 } &= -\frac{ \varepsilon_{\mu_0} }{ \Sigma_{\mu_0} } \\
+# \frac{ \partial F }{ \partial \mu_2 } &= \frac{ \varepsilon_{\mu_2} }{ \Sigma_{\mu_2} } - \frac{ \varepsilon_{s_0} }{ \Sigma_{s_0} } - \frac{ \partial g(\vec{\mu}, \nu) }{ \partial \mu_2 } \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} }\\
+# \end{align}
+# $$
+# with
+# $$
+# \begin{align}
+# \frac{ \partial g(\vec{\mu}, \nu) }{ \partial \mu_0 } =
 #%%
 class GM:
     """ Generative Model.
@@ -128,7 +184,7 @@ class GM:
         self.freq = freq
 
     def f_touch(self, x, v):
-        return sech(a_touch*v)*(1/2 * tanh(a_touch*x-2) + 1/2)
+        return sech(10*np.pi*v)*logistic(10*np.pi*x)
 
     def d_f_touch_dmu0(self, x, v):
         return -a_touch*sech(a_touch*x)*tanh(a_touch*x)*(1/2 * tanh(a_touch*x-2) + 1/2)
