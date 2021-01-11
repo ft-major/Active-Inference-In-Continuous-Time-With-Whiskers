@@ -5,8 +5,8 @@ rng = np.random.RandomState(42)
 def sech(x):
     return 2/(np.exp(x)+np.exp(-x))
 
-def logistic(x):
-    return 1/(1+np.exp(-x))
+def tanh(x):
+    return (np.exp(2*x)-1)/(np.exp(2*x)+1)
 
 def f(x, a, h):
     return a - h*x + np.pi/2
@@ -15,7 +15,7 @@ def f(x, a, h):
 def p2std(p):
     return 10000*np.exp(-p)
 
-p2std(9)
+#p2std(9)
 #%% md
 # # Generative Process
 # $$
@@ -42,7 +42,7 @@ p2std(9)
 #%%
 class GP:                                                               # Generative Process Class
 
-    def __init__(self, dt, omega2_GP=0.5, alpha=2):
+    def __init__(self, dt, omega2_GP=0.5, alpha=1):
 
         self.omega2 = omega2_GP                                         # Harmonic oscillator angular frequency (both x_0 and x_2)
         self.a = alpha                                                  # Harmonic oscillator amplitude ()
@@ -103,13 +103,14 @@ class GP:                                                               # Genera
 # $$
 # with
 # $$
-# g_1(x) = \frac{ 2 }{ \pi }\text{arctan}\left( \frac{ 1 }{ (10 x)^2} \right) \\
-# g_2(x) = \frac{ 1 }{ \pi } \left( \text{arctan}(10 x)+\frac{\pi}{2} \right)
+# g_1(x) = \text{sech}(10x) = \frac{ 2 }{ e^{10 x} + e^{-10 x} } \\
+# g_2(x) = \frac{ 1 }{ 2 } \text{tanh}(10x) +\frac{ 1 }{ 2 } = \frac{ 1 }{ 2 } \left( \frac{ e^{10x}-e^{-10x} }{ e^{10x}+e^{-10x}  } + 1 \right)
 # $$
 # for later is important to notice that
 # $$
-# \frac{ d g_1 }{ dx } = \frac{ 2 }{ \pi }\frac{ 1 }{ (10 x)^{-4} +1 }
-#%% md
+# \frac{ d g_1 }{ dx } = -10 \text{sech}(10x) \text{tanh}(10x)\\
+# \frac{ d g_2 }{ dx } = 5 \text{sech}^2(10x)
+#$$
 # ## Free Energy
 # $$
 # F \approx
@@ -129,19 +130,46 @@ class GP:                                                               # Genera
 # \varepsilon_{s_1} &= s_1-g(\vec{\mu}, \nu)
 # \end{align}
 # $$
-#%% md
 # ## Gradients
 # $$
 # \begin{align}
 # \frac{ \partial F }{ \partial \mu_0 } &= \omega^2 \frac{ \varepsilon_{\mu_1} }{ \Sigma_{\mu_1} } - \nu \frac{ \varepsilon_{\mu_2} }{ \Sigma_{\mu_2} } - \frac{ \partial g(\vec{\mu}, \nu) }{ \partial \mu_0 } \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} }\\
 # \frac{ \partial F }{ \partial \mu_1 } &= -\frac{ \varepsilon_{\mu_0} }{ \Sigma_{\mu_0} } \\
 # \frac{ \partial F }{ \partial \mu_2 } &= \frac{ \varepsilon_{\mu_2} }{ \Sigma_{\mu_2} } - \frac{ \varepsilon_{s_0} }{ \Sigma_{s_0} } - \frac{ \partial g(\vec{\mu}, \nu) }{ \partial \mu_2 } \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} }\\
+# \frac{ \partial F }{ \partial \dot{\mu}_0 } &= \frac{ \varepsilon_{\mu_0} }{ \Sigma_{\mu_0} }\\
+# \frac{ \partial F }{ \partial \dot{\mu}_1 } &= \frac{ \varepsilon_{\mu_1} }{ \Sigma_{\mu_1} }\\
+# \frac{ \partial F }{ \partial \dot{\mu}_2 } &= \frac{ \varepsilon_{\mu_2} }{ \Sigma_{\mu_2} }
 # \end{align}
+# $$
+# ## Internal variables dynamics
+# $$
+# \left[ \begin{matrix} \mu_0(t+dt) \\ \mu_1(t+dt) \\ \mu_2(t+dt) \end{matrix} \right] =
+#	\left[ \begin{matrix} \mu_0(t) + dt \, (\dot{\mu}_0(t) - \eta \frac{ \partial F }{ \partial \mu_0 }) \\
+#						  \mu_1(t) + dt \, (\dot{\mu}_1(t) - \eta \frac{ \partial F }{ \partial \mu_1 }) \\
+#						  \mu_2(t) + dt \, (\dot{\mu}_2(t) - \eta \frac{ \partial F }{ \partial \mu_2 })
+#	\end{matrix} \right]
+# $$
+# $$
+# \left[ \begin{matrix} \dot{\mu}_0(t+dt) \\ \dot{\mu}_1(t+dt) \\ \dot{\mu}_2(t+dt) \end{matrix} \right] =
+#	\left[ \begin{matrix} \dot{\mu}_0(t) + dt \, \eta_d \frac{ \partial F }{ \partial \dot{\mu}_0 } \\
+#						  \dot{\mu}_1(t) + dt \, \eta_d \frac{ \partial F }{ \partial \dot{\mu}_1 } \\
+#						  \dot{\mu}_2(t) + dt \, \eta_d \frac{ \partial F }{ \partial \dot{\mu}_2 }
+#	\end{matrix} \right]
+# $$
+# with $\eta$ and $\eta_d$ gradient descent parameters respectively of $\vec{\mu}$ and $\dot{\vec{\mu}}$
+# ## Action
+# the agent modifies a certain variable of the GP (in our case the alpha parameter) by a quantity given by
+# $$
+# a = \eta_a \left( \frac{ \partial F }{ \partial s_0 }\frac{ \partial s_0 }{ \partial \alpha  } + \frac{ \partial F }{ \partial s_1 }\frac{ \partial s_1 }{ \partial \alpha  } \right)
+#       = \eta_a \left( \frac{ \varepsilon_{s_0} }{ \Sigma_{s_0} }\frac{ \partial s_0 }{ \partial \alpha  } + \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} }\frac{ \partial s_1 }{ \partial \alpha  } \right)
 # $$
 # with
 # $$
 # \begin{align}
-# \frac{ \partial g(\vec{\mu}, \nu) }{ \partial \mu_0 } =
+# \frac{ \partial s_0 }{ \partial \alpha } &= \frac{ \cos (\omega t) + \omega \sin (\omega t) }{ \omega^2 + 1 } = \frac{ x_0 - x_1}{ \omega^2 + 1 }  \approx ? \frac{ \mu_0 - \mu_1 }{ \omega^2 + 1 }\\
+# \frac{ \partial s_1 }{ \partial \alpha } &= ? = -10 \, x_0 \, \text{sech}\left(10 (\alpha x_0 - x_2)\right) \, \text{tanh}\left(10 (\alpha x_0 - x_2)\right) \, \left( \frac{ 1 }{ 2 }\text{tanh}(10 x_2) + \frac{ 1 }{ 2 } \right) \approx ? -10 \, \mu_0 \, \text{sech}\left(10 (\alpha \mu_0 - \mu_2)\right) \, \text{tanh}\left(10 (\alpha \mu_0 - \mu_2)\right) \, \left( \frac{ 1 }{ 2 }\text{tanh}(10 \mu_2) + \frac{ 1 }{ 2 } \right)
+# \end{align}
+# $$
 #%%
 class GM:
     """ Generative Model.
@@ -165,11 +193,9 @@ class GM:
 
     """
 
-    def __init__(self, dt, eta=0.0005, eta_d=1000,
-                 freq=0.001, amp=np.pi/2):
+    def __init__(self, dt, eta=0.0005, eta_d=1000, eta_a=1
+                 omega2_GM=0.5, nu=1):
 
-        self.pi_s = np.array([9,9])
-        self.pi_x = np.array([9,9,9])
         self.omega_s = p2std(self.pi_s)
         self.omega_x = p2std(self.pi_x)
 
