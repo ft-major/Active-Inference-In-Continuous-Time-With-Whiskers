@@ -45,11 +45,11 @@ class GP:                                                               # Genera
     def __init__(self, dt, omega2_GP=0.5, alpha=1):
 
         self.omega2 = omega2_GP                                         # Harmonic oscillator angular frequency (both x_0 and x_2)
-        self.a = alpha                                                  # Harmonic oscillator amplitude ()
+        self.a = alpha                                                  # Harmonic oscillator amplitude (no really)
         self.x = np.array([1.,0., self.a/(self.omega2 + 1)])            # Vector x={x_0, x_1, x_2} initialized with his initial conditions
         self.s = np.array([self.a/(self.omega2 + 1), 0.])               # Array storing respectively proprioceptive sensory input (initialized with the real
                                                                         # value x_2) and touch sensory input
-        self.Sigma_s = 1                                                # Variance of the Gaussian noise that gives proprioceptive sensory input
+        self.Sigma_s = 1.                                               # Variance of the Gaussian noise that gives proprioceptive sensory input
         self.dt = dt                                                    # Size of a simulation step
         self.t = 0                                                      # Time variable
         self.platform_position = 0.5                                    # Platform position (when is present) with respect to x_2 variable
@@ -172,79 +172,56 @@ class GP:                                                               # Genera
 # $$
 #%%
 class GM:
-    """ Generative Model.
 
-    Attributes:
-        pi_s: (float) Precision of sensory probabilities.
-        pi_x: (float) Precision of hidden states probabilities.
-        pi_nu: (float) Precision of hidden causes probabilities.
-        h: (float) Integration step of hidden states dynamics.
-        gamma: (float) Attenuation factor of sensory prediction error.
-        mu_s: (float)  sensory channel (central value).
-        mu_x: (float) hidden state (central value).
-        dmu_x: (float) Change of  hidden state (central value).
-        mu_nu: (float) Internal cause (central value).
-        da: (float) Increment of action
-        dt: (float) Integration step
-        eta: (float) Free energy gradient step
-        omega_s: (float) Standard deviation of sensory states
-        omega_x: (float)  Standard deviation of inner states
-        omega_nu : (float) Standard deviation of inner causes
+    def __init__(self, dt, eta=0.0005, eta_d=1000, eta_a=0.001, omega2_GM=0.5, nu=1):
 
-    """
+        self.omega2 = omega2_GM                                         # Harmonic oscillator angular frequency
+        self.nu = nu                                                    # Harmonic oscillator amplitude (no really)
+        self.mu = np.array([1.,0., self.a/(self.omega2+1)])             # Vector \vec{\mu}={\mu_0, \mu_1, \mu_2} initialized with the GP initial conditions
+        self.dmu = np.array([0.,-self.omega2, (self.nu*self.mu[0]-self.mu[2])])
+                                                                        # Vector \dot{\vec{\mu}}={\dot{\mu_0}, \dot{\mu_1}, \dot{\mu_2}} inizialized with the right ones
+        self.Sigma_s = np.array([1.,1.])                                # Variances (inverse of precisions) of sensory input (the first one proprioceptive and the second one touch)
+        self.Sigma_mu = np.array([1.,1.,1.])                            # Internal variables precisions
+        self.da = 0                                                     # Action variable
+        self.dt = dt                                                    # Size of a simulation step
+        self.eta = np.array([eta, eta_d, eta_a])                        # Gradient descent weights
 
-    def __init__(self, dt, eta=0.0005, eta_d=1000, eta_a=1
-                 omega2_GM=0.5, nu=1):
+    def g_touch(self, prec=10, x, v):                                   # Touch function
+        return sech(prec*v)*(0.5*tanh(prec*x)+0.5)
 
-        self.omega_s = p2std(self.pi_s)
-        self.omega_x = p2std(self.pi_x)
+    def dg_dmu0(self, prec=10, x, v, dv_dmu0):                          # Derivative of the touch function with respect to \mu_0
+        return -prec*dv_dmu0*sech(prec*v)*tanh(prec*v)*(0.5 * tanh(prec*x) + 0.5)
 
-        self.mu_x = np.array([1.,0.,amp*1])
-        self.dmu_x = np.array([0.,-1/freq,0.])
-        self.nu = amp
+    def dg_dmu2(self, prec=10, x, v, dx_dmu2=1, dv_dmu2=-1):            # Derivative of the touch function with respect to \mu_2
+        return -prec*dv_dmu2*sech(prec*v)*tanh(prec*v)*(0.5 * tanh(prec*x) + 0.5) + sech(prec*v)*5*dx_dmu2*(sech(prec*x))**2
 
-        self.da = 1
-        self.dt = dt
-        self.eta = eta
-        self.eta_d = eta_d
-        self.freq = freq
-
-    def f_touch(self, x, v):
-        return sech(10*np.pi*v)*logistic(10*np.pi*x)
-
-    def d_f_touch_dmu0(self, x, v):
-        return -a_touch*sech(a_touch*x)*tanh(a_touch*x)*(1/2 * tanh(a_touch*x-2) + 1/2)
-
-    def d_f_touch_dmu1(self, x, v):
-        return sech(a_touch*v)*5*(sech(a_touch*x-2))**2
-
-    def update(self, sensory_states):
-        """ Update dynamics and give action
-
-            Args:
-                sensory_states: float current real proprioceptive and
-                    somstosensory perception
-
-            Returns:
-                (float) current action increment
-         """
+    def update(self, sensory_states):                                   # Function that implement the update of internal variables.
+                                                                        # sensory_states argument (two dimensional array) come from GP and store proprioceptive
+                                                                        # and somatosensory perception
+                                                                        # Returns action increment
 
         # update sensory states and dynamic precision
         self.s = sensory_states
-        self.da = self.mu_x[0]
-
         s = self.s
-        oms, omx = (self.omega_s, self.omega_x)
-        mx = self.mu_x
-        dmx = self.dmu_x
-        n = self.nu
-        da, fr = self.da, self.freq
+        S_mu, S_s = (self.Sigma_mu, self.Sigma_s)
+        mu = self.mu_x
+        dmu = self.dmu_x
+        nu = self.nu
+        da, om2 = self.da, self.omega2
+        PE_mu = np.array([
+            dmu[0]-mu[1],
+            dmu[1]+om2*mu[0],
+            dmu[2]-(nu*mu[0]-mu[2])
+            ])
+        PE_s = np.array([
+            s[0]-mu[2],
+            s[1]-self.g_touch(x=mu[2], v=(nu*mu[0]-mu[2]))          #v=dmu[2]?
+        ])
 
-        # TODO: gradient descent optimizations
-        self.gd_mu_x = np.array([
-            -(1/omx[2])*n*(n*mx[0]-mx[2]-dmx[2]) - (1/omx[1])*(mx[0]+dmx[1]) + (1/oms[1])*(s[1]-self.f_touch(mx[0],mx[1]))*self.d_f_touch_dmu0(mx[0],mx[1]) ,
-            -(1/omx[0])*fr*(mx[1]*fr-dmx[0]) + (1/oms[1])*(s[1]-self.f_touch(mx[0],mx[1]))*self.d_f_touch_dmu1(mx[0],mx[1]),
-            (1/oms[0])*(s[0]-mx[2]) - (1/omx[2])*(dmx[2]-(n*mx[0]-mx[2]))
+        dF_dmu = np.array([
+            om2*PE_mu[1]/S_mu[1] - nu*PE_mu[2]/S_mu[2] - self.dg_dmu0(x=mu[2],v=(nu*mu[0]-mu[2]), dv_dmu0=nu)*PE_s[1]/S_s[1],
+            -PE_mu[0]/S_mu[0],
+            PE_mu[2]/S_mu[2] - PE_s[0]/S_s[0] - self.dg_dmu2(x=mu[2], v=(nu*mu[0]-mu[2]))*PE_s[1]/S_s[1]
             ])
 
         self.gd_dmu_x = np.array([
