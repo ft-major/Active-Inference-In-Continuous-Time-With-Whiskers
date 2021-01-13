@@ -84,7 +84,7 @@ class GM:
 
     """
 
-    def __init__(self, dt=0.0005, eta=0.0005, eta_d=1000,
+    def __init__(self, dt=0.0005, eta=0.1, eta_d=1000,
                  freq=0.001, amp=np.pi/2):
 
         self.pi_s = np.array([9,9])
@@ -164,7 +164,7 @@ class GM:
 if __name__ == "__main__":
 
     gp = GP(dt=0.0005, freq=0.5, amp=1)
-    gm = GM(dt=0.0005, eta=0.1, freq=0.5, amp=1)
+    gm = GM(dt=0.0005, eta=0.1, eta_d=1000, freq=0.5, amp=1)
 
     # %%
     data = []

@@ -61,15 +61,14 @@ class GP:                                                               # Genera
                                                                         # variable affecting the amplitude of the oscillation.
 
         self.t += dt                                                    # Increment of time variable
-        self.a += self.dt*action                                        # Increment of alpha variable (that changes the amplitude) given by agent's action
+        self.a += action                                        # Increment of alpha variable (that changes the amplitude) given by agent's action
         self.x[0] += self.dt*(self.x[1])                                # GP dynamics implementation
         self.x[1] += self.dt*(-self.omega2*self.x[0])
         self.x[2] += self.dt*(self.a*self.x[0] - self.x[2])
-        if self.t in self.platform_interval:                            # Platform Action
+        if self.t>self.platform_interval[0] and self.t<self.platform_interval[1]:                            # Platform Action
             if self.x[2] > self.platform_position:
                 self.s[1] = 1.
                 self.x[2] = self.platform_position
-                print(self.x[2])
             else:
                 self.s[1] = 0.
         else:
@@ -183,7 +182,7 @@ class GP:                                                               # Genera
 #%%
 class GM:
 
-    def __init__(self, dt, eta=0.005, eta_d=100, eta_a=100, eta_nu=0.001, omega2_GM=0.5, nu=1):
+    def __init__(self, dt=0.005, eta=0.1, eta_d=0.1, eta_a=1, eta_nu=1, omega2_GM=0.5, nu=1):
 
         self.omega2 = omega2_GM                                         # Harmonic oscillator angular frequency
         self.nu = nu                                                    # Harmonic oscillator amplitude (no really)
@@ -194,7 +193,7 @@ class GM:
         self.Sigma_mu = np.array([1.,1.,1.])                            # Internal variables precisions
         self.da = 0                                                     # Action variable
         self.dt = dt                                                    # Size of a simulation step
-        self.eta = np.array([eta, eta_d, eta_a, eta_nu])                        # Gradient descent weights
+        self.eta = np.array([eta, eta_d, eta_a, eta_nu])                # Gradient descent weights
 
     def g_touch(self, x, v, prec=10):                                   # Touch function
         return sech(prec*v)*(0.5*tanh(prec*x)+0.5)
@@ -218,26 +217,26 @@ class GM:
         nu = self.nu
         om2 = self.omega2
         eta, eta_d, eta_a, eta_nu = (self.eta[0], self.eta[1], self.eta[2], self.eta[3])
-        PE_mu = np.array([
+        self.PE_mu = np.array([
             dmu[0]-mu[1],
             dmu[1]+om2*mu[0],
             dmu[2]-(nu*mu[0]-mu[2])
             ])
-        PE_s = np.array([
+        self.PE_s = np.array([
             s[0]-mu[2],
             s[1]-self.g_touch(x=mu[2], v=(nu*mu[0]-mu[2]))          #v=dmu[2]?
         ])
 
         dF_dmu = np.array([
-            om2*PE_mu[1]/S_mu[1] - nu*PE_mu[2]/S_mu[2] - self.dg_dmu0(x=mu[2],v=(nu*mu[0]-mu[2]), dv_dmu0=nu)*PE_s[1]/S_s[1],
-            -PE_mu[0]/S_mu[0],
-            PE_mu[2]/S_mu[2] - PE_s[0]/S_s[0] - self.dg_dmu2(x=mu[2], v=(nu*mu[0]-mu[2]))*PE_s[1]/S_s[1]
+            om2*self.PE_mu[1]/S_mu[1] - nu*self.PE_mu[2]/S_mu[2] - self.dg_dmu0(x=mu[2],v=(nu*mu[0]-mu[2]), dv_dmu0=nu)*self.PE_s[1]/S_s[1],
+            -self.PE_mu[0]/S_mu[0],
+            self.PE_mu[2]/S_mu[2] - self.PE_s[0]/S_s[0] - self.dg_dmu2(x=mu[2], v=(nu*mu[0]-mu[2]))*self.PE_s[1]/S_s[1]
             ])
 
         dF_d_dmu = np.array([
-            PE_mu[0]/S_mu[0],
-            PE_mu[1]/S_mu[1],
-            PE_mu[2]/S_mu[2]
+            self.PE_mu[0]/S_mu[0],
+            self.PE_mu[1]/S_mu[1],
+            self.PE_mu[2]/S_mu[2]
             ])
 
         # Internal variables update
@@ -245,74 +244,104 @@ class GM:
         self.dmu += -self.dt*eta_d*dF_d_dmu
 
         # Action update
-        dF_da = (self.mu[0]-self.mu[1])/(om2+1)*PE_s[0]/S_s[0] + ( self.dg_dmu0(x=self.mu[2], v=(self.nu*self.mu[0]-self.mu[2]), dv_dmu0=self.mu[0]) ) * PE_s[1]/S_s[1]
-        self.da = -self.dt*eta_a*dF_da
+        dF_da = (self.mu[0]-self.mu[1])/(om2+1)*self.PE_s[0]/S_s[0] + ( self.dg_dmu0(x=self.mu[2], v=(self.nu*self.mu[0]-self.mu[2]), dv_dmu0=self.mu[0]) ) * self.PE_s[1]/S_s[1]
+        #self.da = -self.dt*eta_a*dF_da
+        #dF_da = (self.mu[0])*self.PE_s[0]/S_s[0] + ( self.mu[0] ) * self.PE_s[1]/S_s[1]
+        #self.da = self.dt*eta_a*dF_da
 
         # Learning internal parameter nu
-        dF_dnu = -self.mu[0]*PE_mu[2]/S_mu[2] - ( self.dg_dmu0(x=self.mu[2], v=(self.nu*self.mu[0]-self.mu[2]), dv_dmu0=self.mu[0]) ) * PE_s[1]/S_s[1]
-        self.nu += -self.dt*eta_nu*dF_dnu
+        dF_dnu = -self.mu[0]*self.PE_mu[2]/S_mu[2] - ( self.dg_dmu0(x=self.mu[2], v=(self.nu*self.mu[0]-self.mu[2]), dv_dmu0=self.mu[0]) ) * self.PE_s[1]/S_s[1]
+        #self.nu += -self.dt*eta_nu*dF_dnu
         # Efference copy
-        #self.nu += self.dt*self.da
+        #self.nu += self.da
 
         return self.da
+
+#%% Testing touch function
+gm=GM()
+omega = np.sqrt(gm.omega2)
+nu = 2#gm.nu
+time = np.arange(0, 30, 0.001 )
+x0 = np.cos(omega*time)
+x1 = -omega*np.sin(omega*time)
+x2 = nu*(np.cos(omega*time)+omega*np.sin(omega*time))/(omega**2+1)
+dx2 = nu*(-np.sin(omega*time)+omega**2*np.cos(omega*time))/(omega**2+1)
+touch = gm.g_touch(x=x2, v=dx2)
+dtouch_dx0 = gm.dg_dmu0(x=x2, v=dx2, dv_dmu0=nu)
+dtouch_dx2 = gm.dg_dmu2(x=x2, v=dx2, dv_dmu2=-1)
+
+plt.plot(figsize=(10,6))
+plt.subplot(211)
+plt.plot(time, x0, label=r"$x_0$", c='#1f77b4')
+plt.plot(time, x2, label=r"$x_2$", c='#ff7f0e')
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+plt.subplot(212)
+plt.plot(time, x1, label=r"$x_1$", c='#2ca02c')
+plt.plot(time, dx2, label=r"$\frac{dx_2}{dt}$", c='#d62728')
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+plt.show()
+#%%
+plt.subplot(311)
+plt.plot(time, x2, label=r"$x_2$", c='#ff7f0e')
+plt.plot(time, touch, label=r"touch function $g$", c='#9467bd')
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+plt.subplot(312)
+plt.plot(time, x0, label=r"$x_0$", c='#1f77b4')
+plt.plot(time, dtouch_dx0, label=r"$\frac{dg}{dx_0}$", c='#8c564b')
+#plt.plot(time, dtouch_dx2, label=r"$\frac{dg}{dx_2}$", c='#7f7f7f')
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+plt.subplot(313)
+plt.plot(time, x2, label=r"$x_2$", c='#ff7f0e')
+plt.plot(time, dtouch_dx2, label=r"$\frac{dg}{dx_2}$", c='#7f7f7f')
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+plt.show()
+
 
 #%%
 
 if __name__ == "__main__":
     dt = 0.0005
     n_steps = 200000
-    gp = GP(dt=dt)
-    gm = GM(dt=0.0005)
+    gp = GP(dt=dt, omega2_GP=0.5, alpha=1)
+    gm = GM(dt=0.005, eta=0.005, eta_d=100, eta_a=0.001, eta_nu=0.001, omega2_GM=0.5, nu=1)
 
 #%%
     data = []
     a = 0.
     for step in np.arange(n_steps):
-        gp.update(a)
+        gp.update(0)
         a=gm.update(gp.s)
-        data.append([gp.x[2], gp.a, gm.mu[2], gm.nu])
+        data.append([gp.x[2], gp.a, gm.mu[2], gm.nu, gm.PE_mu[0], gm.PE_mu[1], gm.PE_mu[2], gm.PE_s[0], gm.PE_s[1]])
     data = np.vstack(data)
     platform = gp.platform_for_graph()
 #%%
-    plt.figure(figsize=(10, 6))
-    plt.subplot(211)
-    plt.plot(np.arange(0,n_steps*dt,dt), data[:, 0], c="red", lw=1, ls="dashed")
-    plt.plot(np.arange(0,n_steps*dt,dt), data[:, 1], c="#aa6666", lw=3)
-    plt.plot(platform[:,0], platform[:,1], c="black", lw=0.5)
-    plt.subplot(212)
-    plt.plot(np.arange(0,n_steps*dt,dt), data[:, 2], c="green", lw=1, ls="dashed")
-    plt.plot(np.arange(0,n_steps*dt,dt), data[:, 3], c="#66aa66", lw=3)
-    plt.plot(platform[:,0], platform[:,1], c="black", lw=0.5)
-    plt.show()
+plt.subplot(311)
+plt.plot(np.arange(0,n_steps*dt,dt), data[:, 4], label=r"$PE_{\mu 0}$")
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+plt.subplot(312)
+plt.plot(np.arange(0,n_steps*dt,dt), data[:, 5], label=r"$PE_{\mu 1}$")
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+plt.subplot(313)
+plt.plot(np.arange(0,n_steps*dt,dt), data[:, 6], label=r"$PE_{\mu 2}$")
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+plt.show()
+#%%
+plt.subplot(211)
+plt.plot(np.arange(0,n_steps*dt,dt), data[:, 7], label=r"$PE_{s 0}$")
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+plt.subplot(212)
+plt.plot(np.arange(0,n_steps*dt,dt), data[:, 8], label=r"$PE_{s 1}$")
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+plt.show()
 
-    # %%
-    data = []
-    platform = []
-    a = 0.0
-    stime = 200000
-    for t in range(stime):
-        touch = 0.
-        if t > 30000 and t<150000:
-            if gp.mu_x[2]>0.5:
-                touch = 1.
-                gp.mu_x[2] = 0.5
-                platform.append([t,0.5])
-
-        gp.update(a)
-        s, gpm, gmm, gpa, gmn = gp.s, gp.mu_x[2], gm.mu_x[2], gp.a, gm.nu
-        a = gm.update( [s,touch] )
-        data.append([s, gpm, gmm, gpa, gmn])
-    data = np.vstack(data)
-
-    # %%
-    platform = np.vstack(platform)
-    plt.figure(figsize=(10, 6))
-    plt.subplot(211)
-    plt.plot(data[:, 1], c="red", lw=1, ls="dashed")
-    plt.plot(data[:, 3], c="#aa6666", lw=3)
-    plt.plot(platform[:,0], platform[:,1], c="black", lw=0.5)
-    plt.subplot(212)
-    plt.plot(data[:, 2], c="green", lw=1, ls="dashed")
-    plt.plot(data[:, 4], c="#66aa66", lw=3)
-    plt.plot(platform[:,0], platform[:,1], c="black", lw=0.5)
-    plt.show()
+#%%
+plt.figure(figsize=(10, 6))
+plt.subplot(211)
+plt.plot(np.arange(0,n_steps*dt,dt), data[:, 0], c="red", lw=1, ls="dashed")
+plt.plot(np.arange(0,n_steps*dt,dt), data[:, 1], c="#aa6666", lw=3)
+plt.plot(platform[:,0], platform[:,1], c="black", lw=0.5)
+plt.subplot(212)
+plt.plot(np.arange(0,n_steps*dt,dt), data[:, 2], c="green", lw=1, ls="dashed")
+plt.plot(np.arange(0,n_steps*dt,dt), data[:, 3], c="#66aa66", lw=3)
+plt.plot(platform[:,0], platform[:,1], c="black", lw=0.5)
+plt.show()
