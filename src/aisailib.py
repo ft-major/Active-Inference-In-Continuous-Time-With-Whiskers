@@ -1,7 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from mpmath import sech, tanh
 rng = np.random.RandomState()
+
+def sech(x):
+    return 2/(np.exp(x)+np.exp(-x))
+
+def tanh(x):
+    return (np.exp(2*x)-1)/(np.exp(2*x)+1)
 
 
 def f(x, a, h):
@@ -10,7 +15,7 @@ def f(x, a, h):
 
 def p2std(p):
     return 10000*np.exp(-p)
-
+p2std(9.)
 # %%
 
 
@@ -36,10 +41,10 @@ class GP:
 
     def __init__(self, dt=0.0005, freq=0.01, amp=0.1):
 
-        self.pi_s = 9
+        self.pi_s = 9.
         self.mu_x = np.array([1.,0.,amp/(freq+1)])
         self.mu_s = 1
-        self.omega_s = 1#p2std(self.pi_s)
+        self.omega_s = 0.01#p2std(self.pi_s)
         self.dt = dt
         self.freq = freq
         self.a = amp
@@ -89,7 +94,7 @@ class GM:
 
         self.pi_s = np.array([9,9])
         self.pi_x = np.array([9,9,9])
-        self.omega_s = np.array([1.,1.]) #p2std(self.pi_s)
+        self.omega_s = np.array([0.01,0.01]) #p2std(self.pi_s)
         self.omega_x = np.array([1.,1.,1.]) #p2std(self.pi_x)
 
         self.mu_x = np.array([1.,0.,amp/(freq+1)])
@@ -164,7 +169,7 @@ class GM:
 if __name__ == "__main__":
 
     gp = GP(dt=0.0005, freq=0.5, amp=1)
-    gm = GM(dt=0.0005, eta=0.1, eta_d=1000, freq=0.5, amp=1)
+    gm = GM(dt=0.0005, eta=0.1, eta_d=100, freq=0.5, amp=1)
 
     # %%
     data = []
@@ -179,15 +184,20 @@ if __name__ == "__main__":
                 gp.mu_x[2] = 0.5
                 platform.append([t,0.5])
 
-        gp.update(a)
+        gp.update(0)
         s, gpm, gmm, gpa, gmn = gp.s, gp.mu_x[2], gm.mu_x[2], gp.a, gm.nu
         a = gm.update( [s,touch] )
         data.append([s, gpm, gmm, gpa, gmn])
     data = np.vstack(data)
 
     # %%
+
+    plt.figure(figsize=(20, 15))
+    plt.plot(data[:, 1], c="red", lw=1, ls="dashed")
+    plt.plot(data[:,0])
+    #%%
     platform = np.vstack(platform)
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(20, 12))
     plt.subplot(211)
     plt.plot(data[:, 1], c="red", lw=1, ls="dashed")
     plt.plot(data[:, 3], c="#aa6666", lw=3)
