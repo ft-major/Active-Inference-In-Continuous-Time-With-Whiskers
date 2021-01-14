@@ -186,10 +186,10 @@ class GM:
 
         self.omega2 = omega2_GM                                         # Harmonic oscillator angular frequency
         self.nu = nu                                                    # Harmonic oscillator amplitude (no really)
-        self.mu = np.array([1.,0., 0.8])#self.nu/(self.omega2+1)])      # Vector \vec{\mu}={\mu_0, \mu_1, \mu_2} initialized with the GP initial conditions
+        self.mu = np.array([1.,0., 1/1.5])#self.nu/(self.omega2+1)])      # Vector \vec{\mu}={\mu_0, \mu_1, \mu_2} initialized with the GP initial conditions
         self.dmu = np.array([0.,-self.omega2, (self.nu*self.mu[0]-self.mu[2])])
                                                                         # Vector \dot{\vec{\mu}}={\dot{\mu_0}, \dot{\mu_1}, \dot{\mu_2}} inizialized with the right ones
-        self.Sigma_s = np.array([0.01,0.01])                            # Variances (inverse of precisions) of sensory input (the first one proprioceptive and the second one touch)
+        self.Sigma_s = np.array([0.01,100000])                            # Variances (inverse of precisions) of sensory input (the first one proprioceptive and the second one touch)
         self.Sigma_mu = np.array([0.01,0.01,0.01])                      # Internal variables precisions
         self.da = 0                                                     # Action variable
         self.dt = dt                                                    # Size of a simulation step
@@ -258,6 +258,99 @@ class GM:
 
         return self.da
 
+
+#%%
+
+if __name__ == "__main__":
+    dt = 0.0005
+    n_steps = 100# 200000/2
+    gp = GP(dt=dt, omega2_GP=0.5, alpha=1)
+    gm = GM(dt=0.005, eta=0.001, eta_d=1, eta_a=0.001, eta_nu=0.001, omega2_GM=0.5, nu=1)
+
+#%%
+    data_GP = []
+    data_GM = []
+    a = 0.
+    for step in np.arange(n_steps):
+        if step>0 and step<10:
+            print("x_0=", gm.mu[0], "x_2=", gm.mu[2])
+            if step>=1:
+                print("dF_dmu[0]=", gm.dF_dmu[0], "=\n\t", gm.omega2*gm.PE_mu[1]/gm.Sigma_mu[1], "+", - gm.nu*gm.PE_mu[2]/gm.Sigma_mu[2], "+", -gm.dg_dmu0(x=gm.mu[2],v=(gm.nu*gm.mu[0]-gm.mu[2]), dv_dmu0=gm.nu)*gm.PE_s[1]/gm.Sigma_s[1])
+                print("dF_dmu[1]=", gm.dF_dmu[1], "=\n\t", -gm.PE_mu[0]/gm.Sigma_mu[0] )
+                print("dF_dmu[2]=", gm.dF_dmu[2], "=\n\t", gm.PE_mu[2]/gm.Sigma_mu[2], "+", -gm.PE_s[0]/gm.Sigma_s[0], "+", -gm.dg_dmu2(x=gm.mu[2], v=(gm.nu*gm.mu[0]-gm.mu[2]))*gm.PE_s[1]/gm.Sigma_s[1], "\n")
+        a=gm.update(gp.s)
+        gp.update(0)
+        data_GP.append([gp.x[2], gp.a, gp.s[0], gp.s[1] ])
+        data_GM.append([ gm.mu[2], gm.nu, gm.PE_mu[0], gm.PE_mu[1], gm.PE_mu[2], gm.PE_s[0], gm.PE_s[1], gm.dmu[2], gm.mu[0] ])
+    data_GP = np.vstack(data_GP)
+    data_GM = np.vstack(data_GM)
+    #platform = gp.platform_for_graph()
+#%%
+plt.figure(figsize=(12, 8))
+plt.subplot(211)
+plt.plot(np.arange(0,n_steps*dt,dt), data_GP[:, 0], c="red", lw=1, ls="dashed", label=r"$x_2$")
+plt.plot(np.arange(0,n_steps*dt,dt), data_GP[:, 1], c="#aa6666", lw=3, label=r"\alpha")
+#plt.plot(platform[:,0], platform[:,1], c="black", lw=0.5, label="platform")
+plt.ylim(bottom=-1)
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+plt.subplot(212)
+plt.plot(np.arange(0,n_steps*dt,dt), data_GM[:, 0], c="green", lw=1, ls="dashed", label=r"$\mu_2$")
+#plt.plot(np.arange(0,n_steps*dt,dt), data_GM[:, 7], lw=1, ls="dashed", label=r"$\dot{\mu}_2$")
+plt.plot(np.arange(0,n_steps*dt,dt), data_GM[:, 1], c="#66aa66", lw=3, label=r"\nu")
+plt.plot(np.arange(0,n_steps*dt,dt), data_GM[:, 8], c="blue", lw=1, ls="dashed", label=r"$\mu_0$")
+#plt.plot(platform[:,0], platform[:,1], c="black", lw=0.5, label="platform")
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+plt.show()
+#%%
+plt.figure(figsize=(12, 8))
+plt.subplot(211)
+plt.plot(np.arange(0,n_steps*dt,dt), data_GP[:, 0], c="red", lw=1, ls="dashed", label=r"$x_2$")
+plt.plot(np.arange(0,n_steps*dt,dt), data_GP[:, 1], c="#aa6666", lw=3, label=r"\alpha")
+#plt.plot(platform[:,0], platform[:,1], c="black", lw=0.5, label="platform")
+#plt.ylim(bottom=0)
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+plt.subplot(212)
+plt.plot(np.arange(0,n_steps*dt,dt), data_GP[:,2], label="Proprioceptive sensory input")
+plt.plot(np.arange(0,n_steps*dt,dt), data_GP[:,3], label="Touch sensory input")
+#plt.plot(platform[:,0], platform[:,1], c="black", lw=0.5, label="platform")
+#plt.ylim(bottom=0)
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+plt.show()
+
+#%%
+plt.figure(figsize=(12,8))
+plt.subplot(311)
+plt.plot(np.arange(0,n_steps*dt,dt), data_GM[:, 2], label=r"$PE_{\mu 0}$")
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+plt.subplot(312)
+plt.plot(np.arange(0,n_steps*dt,dt), data_GM[:, 3], label=r"$PE_{\mu 1}$")
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+plt.subplot(313)
+plt.plot(np.arange(0,n_steps*dt,dt), data_GM[:, 4], label=r"$PE_{\mu 2}$")
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+plt.show()
+#%%
+plt.figure(figsize=(12,8))
+plt.subplot(211)
+plt.plot(np.arange(0,n_steps*dt,dt), data_GM[:, 5], label=r"$PE_{s 0}$")
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+plt.subplot(212)
+plt.plot(np.arange(0,n_steps*dt,dt), data_GM[:, 6], label=r"$PE_{s 1}$")
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
 #%% Testing touch function
 gm=GM()
 omega = np.sqrt(gm.omega2)
@@ -271,7 +364,7 @@ touch = gm.g_touch(x=x2, v=dx2)
 dtouch_dx0 = gm.dg_dmu0(x=x2, v=dx2, dv_dmu0=nu)
 dtouch_dx2 = gm.dg_dmu2(x=x2, v=dx2, dv_dmu2=-1)
 
-plt.plot(figsize=(10,6))
+plt.figure(figsize=(12,8))
 plt.subplot(211)
 plt.plot(time, x0, label=r"$x_0$", c='#1f77b4')
 plt.plot(time, x2, label=r"$x_2$", c='#ff7f0e')
@@ -294,80 +387,5 @@ plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
 plt.subplot(313)
 plt.plot(time, x2, label=r"$x_2$", c='#ff7f0e')
 plt.plot(time, dtouch_dx2, label=r"$\frac{dg}{dx_2}$", c='#7f7f7f')
-plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-plt.show()
-
-
-#%%
-
-if __name__ == "__main__":
-    dt = 0.0005
-    n_steps = 20000
-    gp = GP(dt=dt, omega2_GP=0.5, alpha=1)
-    gm = GM(dt=0.005, eta=0.001, eta_d=1, eta_a=0.001, eta_nu=0.001, omega2_GM=0.5, nu=1)
-
-#%%
-    data_GP = []
-    data_GM = []
-    a = 0.
-    for step in np.arange(n_steps):
-        gp.update(0)
-        a=gm.update(gp.s)
-        data_GP.append([gp.x[2], gp.a, gp.s[0], gp.s[1] ])
-        data_GM.append([ gm.mu[2], gm.nu, gm.PE_mu[0], gm.PE_mu[1], gm.PE_mu[2], gm.PE_s[0], gm.PE_s[1], gm.dmu[2] ])
-    data_GP = np.vstack(data_GP)
-    data_GM = np.vstack(data_GM)
-    #platform = gp.platform_for_graph()
-#%%
-plt.figure(figsize=(10, 6))
-plt.subplot(211)
-plt.plot(np.arange(0,n_steps*dt,dt), data_GP[:, 0], c="red", lw=1, ls="dashed", label=r"$x_2$")
-plt.plot(np.arange(0,n_steps*dt,dt), data_GP[:, 1], c="#aa6666", lw=3, label=r"\alpha")
-#plt.plot(platform[:,0], platform[:,1], c="black", lw=0.5, label="platform")
-plt.ylim(bottom=0)
-plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-plt.subplot(212)
-plt.plot(np.arange(0,n_steps*dt,dt), data_GP[:,2], label="Proprioceptive sensory input")
-plt.plot(np.arange(0,n_steps*dt,dt), data_GP[:,3], label="Touch sensory input")
-#plt.plot(platform[:,0], platform[:,1], c="black", lw=0.5, label="platform")
-#plt.ylim(bottom=0)
-plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-plt.show()
-
-#%%
-plt.figure(figsize=(20, 12))
-plt.subplot(311)
-plt.plot(np.arange(0,n_steps*dt,dt), data_GM[:, 2], label=r"$PE_{\mu 0}$")
-plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-plt.subplot(312)
-plt.plot(np.arange(0,n_steps*dt,dt), data_GM[:, 3], label=r"$PE_{\mu 1}$")
-plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-plt.subplot(313)
-plt.plot(np.arange(0,n_steps*dt,dt), data_GM[:, 4], label=r"$PE_{\mu 2}$")
-plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-plt.show()
-#%%
-plt.figure(figsize=(20, 12))
-plt.subplot(211)
-plt.plot(np.arange(0,n_steps*dt,dt), data_GM[:, 5], label=r"$PE_{s 0}$")
-plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-plt.subplot(212)
-plt.plot(np.arange(0,n_steps*dt,dt), data_GM[:, 6], label=r"$PE_{s 1}$")
-plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-plt.show()
-
-#%%
-plt.figure(figsize=(20, 12))
-plt.subplot(211)
-plt.plot(np.arange(0,n_steps*dt,dt), data_GP[:, 0], c="red", lw=1, ls="dashed", label=r"$x_2$")
-plt.plot(np.arange(0,n_steps*dt,dt), data_GP[:, 1], c="#aa6666", lw=3, label=r"\alpha")
-#plt.plot(platform[:,0], platform[:,1], c="black", lw=0.5, label="platform")
-#plt.ylim(bottom=0)
-plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-plt.subplot(212)
-plt.plot(np.arange(0,n_steps*dt,dt), data_GM[:, 2], c="green", lw=1, ls="dashed", label=r"$\mu_2$")
-#plt.plot(np.arange(0,n_steps*dt,dt), data_GM[:, 7], lw=1, ls="dashed", label=r"$\dot{\mu}_2$")
-plt.plot(np.arange(0,n_steps*dt,dt), data_GM[:, 1], c="#66aa66", lw=3, label=r"\nu")
-#plt.plot(platform[:,0], platform[:,1], c="black", lw=0.5, label="platform")
 plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
 plt.show()

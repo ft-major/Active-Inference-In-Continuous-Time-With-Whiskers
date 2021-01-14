@@ -192,12 +192,12 @@ if __name__ == "__main__":
 
     # %%
 
-    plt.figure(figsize=(20, 15))
+    plt.figure(figsize=(12, 8))
     plt.plot(data[:, 1], c="red", lw=1, ls="dashed")
     plt.plot(data[:,0])
     #%%
     platform = np.vstack(platform)
-    plt.figure(figsize=(20, 12))
+    plt.figure(figsize=(12,8))
     plt.subplot(211)
     plt.plot(data[:, 1], c="red", lw=1, ls="dashed")
     plt.plot(data[:, 3], c="#aa6666", lw=3)
