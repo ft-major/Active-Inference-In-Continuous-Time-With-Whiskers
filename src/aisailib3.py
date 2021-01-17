@@ -14,18 +14,45 @@ class GenProc:
     def __init__(self, rng, x):
 
         # Generative process parameters
-        self.rng = rng                              # np.random.RandomState
-        self.SigmaGP_s = 0.1                        # Generative process s variance
-        self.x = x                                  # Two dimensional array storing angle and angle velocity
-        self.omega2 = 0.5                           # Harmonic oscillator angular frequency (omega^2)
-        self.u = 0.5                               # Costant that quantify the amount of energy (friction?) that the agent can insert in the system
 
-    def dynamic(self, dt, action):              # Step of generative process dynamic
+        # np.random.RandomState
+        self.rng = rng
+        # Generative process s variance
+        self.SigmaGP_s = 0.1
+        # Two dimensional array storing angle and angle velocity initialized with his initial conditions
+        self.x = np.array([1., 0.])
+        # Harmonic oscillator angular frequency square (omega^2)
+        self.omega2 = 0.5
+        # Costant that quantify the amount of energy (friction?) that the agent can insert in the system
+        self.u = 0.5
+        # Array storing respectively proprioceptive sensory input (initialized with the real value x_0) and touch sensory input
+        self.s = np.array([1, 0.])
+        # Platform position (when is present) with respect to x_0 variable
+        self.platform_position = 0.5
+        # Time interval in which the platform appears
+        self.platform_interval = [15, 75]
+
+
+    # Step of generative process dynamic
+    def dynamic(self, dt, t, action):
         self.x[0] += self.x[1]*dt
         self.x[1] += -self.omega2*self.x[0]*dt - self.u*np.tanh(action)*dt#*self.x2
 
-    def genS(self):                             # Funciton that create agent's sensory input (two dimensional array)
-        return self.x[0] + self.SigmaGP_s*rng.randn()
+    # Funciton that create agent's sensory input (two dimensional array)
+    def genS(self, t):
+        # Platform Action
+        if t > self.platform_interval[0] and t < self.platform_interval[1]:
+            if self.x[0] > self.platform_position:
+                self.s[1] = 1.
+                self.s[0] = self.platform_position
+            else:
+                self.s[0] = self.x[0]
+                self.s[1] = 0.
+        else:
+            self.s[0] = self.x[0]
+            self.s[1] = 0.
+        self.s[0] += self.Sigma_s*rng.randn()
+        return self.s
 
 
 # Generative model class
