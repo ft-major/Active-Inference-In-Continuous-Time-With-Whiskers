@@ -44,7 +44,7 @@ class GP:
         self.pi_s = 9.
         self.mu_x = np.array([1.,0.,amp/(freq+1)])
         self.mu_s = 1
-        self.omega_s = 0.01#p2std(self.pi_s)
+        self.omega_s = 1#p2std(self.pi_s)
         self.dt = dt
         self.freq = freq
         self.a = amp
@@ -94,7 +94,7 @@ class GM:
 
         self.pi_s = np.array([9,9])
         self.pi_x = np.array([9,9,9])
-        self.omega_s = np.array([0.01,0.01]) #p2std(self.pi_s)
+        self.omega_s = np.array([1.,1.]) #p2std(self.pi_s)
         self.omega_x = np.array([1.,1.,1.]) #p2std(self.pi_x)
 
         self.mu_x = np.array([1.,0.,amp/(freq+1)])
@@ -169,7 +169,7 @@ class GM:
 if __name__ == "__main__":
 
     gp = GP(dt=0.0005, freq=0.5, amp=1)
-    gm = GM(dt=0.0005, eta=0.1, eta_d=100, freq=0.5, amp=1)
+    gm = GM(dt=0.0005, eta=0.1, eta_d=1000, freq=0.5, amp=1)
 
     # %%
     data = []
@@ -184,10 +184,10 @@ if __name__ == "__main__":
                 gp.mu_x[2] = 0.5
                 platform.append([t,0.5])
 
-        gp.update(0)
-        s, gpm, gmm, gpa, gmn = gp.s, gp.mu_x[2], gm.mu_x[2], gp.a, gm.nu
+        gp.update(a)
+        s, gpm, gpm0, gmm, gmm0, gpa, gmn = gp.s, gp.mu_x[2],gp.mu_x[0], gm.mu_x[2], gm.mu_x[0], gp.a, gm.nu
         a = gm.update( [s,touch] )
-        data.append([s, gpm, gmm, gpa, gmn])
+        data.append([s, gpm, gmm, gpa, gmn, gpm0, gmm0])
     data = np.vstack(data)
 
     # %%
@@ -200,10 +200,12 @@ if __name__ == "__main__":
     plt.figure(figsize=(12,8))
     plt.subplot(211)
     plt.plot(data[:, 1], c="red", lw=1, ls="dashed")
+    plt.plot(data[:, 5], c="blue", lw=1, ls="dashed")
     plt.plot(data[:, 3], c="#aa6666", lw=3)
     plt.plot(platform[:,0], platform[:,1], c="black", lw=0.5)
     plt.subplot(212)
     plt.plot(data[:, 2], c="green", lw=1, ls="dashed")
+    plt.plot(data[:, 6], c="blue", lw=1, ls="dashed")
     plt.plot(data[:, 4], c="#66aa66", lw=3)
     plt.plot(platform[:,0], platform[:,1], c="black", lw=0.5)
     plt.show()
