@@ -266,12 +266,11 @@ class GM:
         ])
         # Action update
         dF_da = (self.mu[0]-self.mu[1])/(self.omega2+1)*self.PE_s[0]/self.Sigma_s[0] + \
-        (self.dg_dmu0(x=self.mu[2], v=(self.nu*self.mu[0]-self.mu[2]), dv_dmu0=self.mu[0])) * self.PE_s[1]/self.Sigma_s[1]
+            self.mu[0] * self.PE_s[1]/self.Sigma_s[1]
         self.da = -self.dt*eta_a*dF_da
 
         # Learning internal parameter nu
-        dF_dnu = -self.mu[0]*self.PE_mu[2]/self.Sigma_mu[2] \
-        -(self.dg_dmu0(x=self.mu[2], v=(self.nu*self.mu[0]-self.mu[2]), dv_dmu0=self.mu[0])) * self.PE_s[1]/self.Sigma_s[1]
+        #dF_dnu = -self.mu[0]*self.PE_mu[2]/self.Sigma_mu[2] + self.mu[0]* self.PE_s[1]/self.Sigma_s[1]
         #self.nu += -self.dt*eta_nu*dF_dnu
 
         # Internal variables update
@@ -283,7 +282,7 @@ class GM:
 
 
         # Efference copy
-        #self.nu += self.da
+        self.nu += self.da
 
         return self.da
 
