@@ -4,6 +4,7 @@
 # Modules
 import numpy as np
 import matplotlib.pyplot as plt
+rng = np.random.RandomState(42)
 
 
 #%% md
@@ -11,12 +12,10 @@ import matplotlib.pyplot as plt
 #%%
 # Generative process class
 class GenProc:
-    def __init__(self, rng, x):
+    def __init__(self):
 
         # Generative process parameters
 
-        # np.random.RandomState
-        self.rng = rng
         # Generative process s variance
         self.SigmaGP_s = 0.1
         # Two dimensional array storing angle and angle velocity initialized with his initial conditions
@@ -54,26 +53,89 @@ class GenProc:
         self.s[0] += self.Sigma_s*rng.randn()
         return self.s
 
-
+#%%
 # Generative model class
 class GenMod:
-    def __init__(self, rng, mu):
-        #self.s = s                                  # Variable that store joint angle proprioceptive input
-        self.a = 0                                  # Action variable
-        self.mu = mu                                # Three dimensional array styoring brain state variables mu, mu' and mu'', corresponding rispectively to angle, angle velocity and angle accerelation internal representations.
-        self.omega2 = 0.5                           # Harmonic oscillator angular frequency (omega^2). We're assuming is equal to the one of the GP
-        self.u = 0.005                              # Costant that quantify the amount of energy (friction?) that the agent can insert in the system. In this case we're assuming is the same as the one of the GP
+    def __init__(self):
 
-        self.Sigma_s = 1                            # Generative model s variance (in this case we're assuming the agent knows gp variace)
-        self.Sigma_mu2 = 1                          # Generative model mu'' variance
-        self.k_mu = 0.1                             # Gradient descent inference parameter
-        self.k_a = 0.01                             # Gradient descent action parameter
+        # Generative process parameters
 
-    def VFE(self, s):                               # Variational Free Energy
-        epsilon_s = s - self.mu[0]                  # Sensory prediction error
-        epsilon_mu2 = self.mu[2] + self.omega2*self.mu[0]
-                                                    # Internal variable prediction error
-        return 1/2*( espilon_s**2/self.Sigma_s - espilon_mu2**2/self.Sigma_mu2 )
+        # Harmonic oscillator angular frequency (omega^2). We're assuming is equal to the one of the GP
+        self.omega2 = 0.5
+        # Vector \vec{\mu}={\mu_0, \mu_1} initialized with the GP initial conditions
+        self.mu = np.array([1., 0.])
+        # Vector \dot{\vec{\mu}}={\dot{\mu_0}, \dot{\mu_1}} inizialized with the right ones
+        self.dmu = np.array([0., -self.omega2])
+        # Internal variables precisions
+        self.Sigma_mu = np.array([0.01, 0.01])
+        # Array storing respectively proprioceptive sensory input (initialized with the real value x_0) and touch sensory input
+        self.s = np.array([1, 0.])
+        # Variances (inverse of precisions) of sensory input (the first one proprioceptive and the second one touch)
+        self.Sigma_s = np.array([0.01, 10000])
+        # Action variable
+        self.a = 0
+        # Costant that quantify the amount of energy (friction?) that the agent can insert in the system. In this case we're assuming is the same as the one of the GP
+        self.u = 0.5
+        # Gradient descent inference parameter
+        self.k_mu = 0.1
+        # Gradient descent action parameter
+        self.k_a = 0.1
+
+    # Touch function
+    def g_touch(self, x, v, prec=10):
+        return sech(prec*v)*(0.5*tanh(prec*x)+0.5)
+
+    # Derivative of the touch function with respect to \mu_0
+    def dg_dv(self, x, v, prec=10):
+        return -prec*sech(prec*v)*tanh(prec*v)*(0.5 * tanh(prec*x) + 0.5)
+
+    # Derivative of the touch function with respect to \mu_2
+    def dg_dx(self, x, v, prec=10):
+        return sech(prec*v)*prec*0.5*(sech(prec*x))**2
+
+    # Function that implement the update of internal variables.
+    def update(self, sensory_states):
+        # sensory_states argument (two dimensional array) come from GP and store proprioceptive
+        # and somatosensory perception
+        # Returns action increment
+
+        self.s = sensory_states
+
+        self.PE_mu = np.array([
+            self.dmu[0]-self.mu[1],
+            self.dmu[1]+self.omega2*self.mu[0]
+        ])
+        self.PE_s = np.array([
+            self.s[0]-self.mu[0],
+            self.s[1]-self.g_touch(x=self.mu[0], v=self.mu[1])  # v=self.dmu[0]?
+        ])
+
+        self.dF_dmu = np.array([
+            self.omega2*self.PE_mu[1]/self.Sigma_mu[1] - self.PE_s[0]/self.Sigma_s[0] \
+                -self.dg_dx(x=self.mu[0], v=self.mu[1])*self.PE_s[1]/self.Sigma_s[1],
+            -self.PE_mu[0]/self.Sigma_mu[0] - self.dg_dv(x=self.mu[0], v=self.mu[1])*self.PE_s[1]/self.Sigma_s[1]
+        ])
+
+        self.dF_d_dmu = np.array([
+            self.PE_mu[0]/self.Sigma_mu[0],
+            self.PE_mu[1]/self.Sigma_mu[1]
+        ])
+
+        dF_da = (self.mu[0]-self.mu[1])/(self.omega2+1)*self.PE_s[0]/self.Sigma_s[0] + \
+        (self.dg_dmu0(x=self.mu[2], v=(self.nu*self.mu[0]-self.mu[2]), dv_dmu0=self.mu[0])) * self.PE_s[1]/self.Sigma_s[1]
+
+        # Learning internal parameter nu
+        dF_dnu = -self.mu[0]*self.PE_mu[2]/self.Sigma_mu[2] \
+        -(self.dg_dmu0(x=self.mu[2], v=(self.nu*self.mu[0]-self.mu[2]), dv_dmu0=self.mu[0])) * self.PE_s[1]/self.Sigma_s[1]
+
+        # Internal variables update
+        self.mu += self.dt*(self.dmu - eta*self.dF_dmu)
+        self.dmu += -self.dt*eta_d*self.dF_d_dmu
+
+        self.da = -self.dt*eta_a*dF_da
+        #self.nu += -self.dt*eta_nu*dF_dnu
+
+
 
     def update(self, dt, s):
         epsilon_s = s - self.mu[0]
