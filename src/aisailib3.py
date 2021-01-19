@@ -7,8 +7,35 @@ import matplotlib.pyplot as plt
 rng = np.random.RandomState(42)
 
 
-#%% md
-# ## Classes
+# %% md
+# # Generative Process
+# $$
+#   \dot{\vec{x}}(t) = f(\vec{x}(t), \alpha) =
+#       \left[\begin{array}{cc} 0 & 1 \\ -\omega^2 & 0 \end{array}\right] \cdot \vec{x}(t) =
+#       \left[\begin{array}{c} x_1(t) \\ -\omega^2 x_0(t) \end{array}\right] \nonumber
+# $$
+# ## Initial conditions
+# $$
+# \vec{x}(0) = \left[ \begin{array}{c} x_0(0) \\ x_1(0) \end{array} \right] = \left[ \begin{array}{c} 1 \\ 0 \end{array} \right]
+# $$
+# ## Solution (Without action)
+# $$
+# \vec{x}(t) =
+#   \left[ \begin{array}{c} x_0(t) \\ x_1(t) \end{array} \right] =
+#   \left[ \begin{array}{c} \cos(\omega t) \\ - \omega \sin(\omega t) \end{array} \right]
+# $$
+#
+# From $x_0$ is extracted the proprioceptive sensory input
+# $$
+# s_0 (t) = x_0(t) + \mathcal{N}(s_0;0,\Sigma_{s_0}^{GP})
+# $$
+# If the whisker is stopped by the platform the touch sensory input is set equal to 1 ($s_1=0$ otherwise)
+# and and the proprioceptie sensory input is set to
+# $$
+# s_0 (t) = x_p(t) + \mathcal{N}(s_0;0,\Sigma_{s_0}^{GP})
+# $$
+# with $x_p$ platform position.
+
 #%%
 # Generative process class
 class GenProc:
@@ -53,6 +80,95 @@ class GenProc:
         self.s[0] += self.Sigma_s*rng.randn()
         return self.s
 
+# %% md
+# # Generative Model
+# ## Agent beliefs
+# $$
+# \dot{\vec{\mu}}(t) = f_{dyn}(\vec{\mu}(t), \nu) + z_{\vec{\mu}}=
+#       \left[\begin{array}{cc} 0 & 1 \\ -\omega^2 & 0 \\ \end{array} \right] \cdot \vec{\mu}(t) + \mathcal{N}(\dot{\vec{\mu}}; 0, \hat{\Sigma}_{\vec{\mu}})
+# $$
+# with $\hat{\Sigma}_{\vec{\mu}}$ covariance matrix of the multidimensional gaussian noise. In our case it is a diagonal matrix with diagonal $\Sigma_{\mu_0}, \Sigma_{\mu_1}$
+# $$
+# s_p(\vec{\mu}(t), \nu) =
+#       \left[\begin{array}{c} 1 \\ 0 \end{array} \right]^T \cdot \vec{\mu}(t) + \mathcal{N}(s_p; 0, \Sigma_{s_0})
+# $$
+# $$
+# s_t(\vec{\mu}(t)) = g(\vec{\mu}(t)) + \mathcal{N}(s_t; 0, \Sigma_{s_1}) =
+#       g_1 \left( \left[\begin{array}{c} 0 \\ 1 \end{array} \right]^T \cdot \vec{\mu}(t) \right) g_2 \left( \left[\begin{array}{c} 1 \\ 0 \end{array} \right]^T \cdot \vec{\mu}(t) \right)
+#       + \mathcal{N}(s_t; 0, \Sigma_{s_1})
+# $$
+# with
+# $$
+# g_1(v) = \text{sech}(10v) = \frac{ 2 }{ e^{10 v} + e^{-10 v} } \\
+# g_2(x) = \frac{ 1 }{ 2 } \text{tanh}(10x) +\frac{ 1 }{ 2 } = \frac{ 1 }{ 2 } \left( \frac{ e^{10x}-e^{-10x} }{ e^{10x}+e^{-10x}  } + 1 \right)
+# $$
+# for later is important to notice that
+# $$
+# \frac{ d g_1 }{ dv } = -10 \text{sech}(10v) \text{tanh}(10v)\\
+# \frac{ d g_2 }{ dx } = 5 \text{sech}^2(10x)
+# $$
+# ## Free Energy
+# $$
+# F \approx
+#   \frac{1}{2} \left[ \frac{(\dot{\mu_0}-\mu_1)^2}{\Sigma_{\mu_0}}
+#                       + \frac{(\dot{\mu_1}+ \omega^2 \mu_0)^2}{\Sigma_{\mu_1}}
+#                       + \frac{(s_0-\mu_0)^2}{\Sigma_{s_0}}
+#                       + \frac{(s_1-g(\vec{\mu}))^2}{\Sigma_{s_1}} \right]
+# $$
+# ## Prediction errors
+# $$
+# \begin{align}
+# \varepsilon_{\mu_0} &= \dot{\mu_0}-\mu_1 \\
+# \varepsilon_{\mu_1} &= \dot{\mu_1}+ \omega^2 \mu_0 \\
+# \varepsilon_{s_0} &= s_0-\mu_0 \\
+# \varepsilon_{s_1} &= s_1-g(\vec{\mu})
+# \end{align}
+# $$
+# ## Gradients
+# $$
+# \begin{align}
+# \frac{ \partial F }{ \partial \mu_0 } &= \omega^2 \frac{ \varepsilon_{\mu_1} }{ \Sigma_{\mu_1} } - \frac{ \varepsilon_{s_0} }{ \Sigma_{s_0} } - \frac{ \partial g(\vec{\mu}) }{ \partial \mu_0 } \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} }\\
+# \frac{ \partial F }{ \partial \mu_1 } &= -\frac{ \varepsilon_{\mu_1} }{ \Sigma_{\mu_1} } \\
+# \frac{ \partial F }{ \partial \dot{\mu}_0 } &= \frac{ \varepsilon_{\mu_0} }{ \Sigma_{\mu_0} }\\
+# \frac{ \partial F }{ \partial \dot{\mu}_1 } &= \frac{ \varepsilon_{\mu_1} }{ \Sigma_{\mu_1} }\\
+# \end{align}
+# $$
+# ## Internal variables dynamics
+# $$
+# \left[ \begin{matrix} \mu_0(t+dt) \\ \mu_1(t+dt) \end{matrix} \right] =
+#	\left[ \begin{matrix} \mu_0(t) + dt \, (\dot{\mu}_0(t) - k_{\mu} \frac{ \partial F }{ \partial \mu_0 }) \\
+#						  \mu_1(t) + dt \, (\dot{\mu}_1(t) - k_{\mu} \frac{ \partial F }{ \partial \mu_1 })
+#	\end{matrix} \right]
+# $$
+# $$
+# \left[ \begin{matrix} \dot{\mu}_0(t+dt) \\ \dot{\mu}_1(t+dt) \end{matrix} \right] =
+#	\left[ \begin{matrix} \dot{\mu}_0(t) - dt \, k_{\dot{\mu}} \frac{ \partial F }{ \partial \dot{\mu}_0 } \\
+#						  \dot{\mu}_1(t) - dt \, k_{\dot{\mu}} \frac{ \partial F }{ \partial \dot{\mu}_1 }
+#	\end{matrix} \right]
+# $$
+# with $k_{\mu}$ and $k_{\dot{\mu}}$ gradient descent parameters respectively of $\vec{\mu}$ and $\dot{\vec{\mu}}$
+# ## Action
+# the agent modifies a certain variable of the GP (in our case the alpha parameter) by a quantity given by
+# $$
+# a = dt \eta_a \left( \frac{ \partial F }{ \partial s_0 }\frac{ \partial s_0 }{ \partial \alpha  } + \frac{ \partial F }{ \partial s_1 }\frac{ \partial s_1 }{ \partial \alpha  } \right)
+#       = dt \eta_a \left( \frac{ \varepsilon_{s_0} }{ \Sigma_{s_0} }\frac{ \partial s_0 }{ \partial \alpha  } + \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} }\frac{ \partial s_1 }{ \partial \alpha  } \right)
+# $$
+# with
+# $$
+# \begin{align}
+# \frac{ \partial s_0 }{ \partial \alpha } &= \frac{ \cos (\omega t) + \omega \sin (\omega t) }{ \omega^2 + 1 } = \frac{ x_0 - x_1}{ \omega^2 + 1 }  \approx ? \frac{ \mu_0 - \mu_1 }{ \omega^2 + 1 }\\
+# \frac{ \partial s_1 }{ \partial \alpha } &= ? = -10 \, x_0 \, \text{sech}\left(10 (\alpha x_0 - x_2)\right) \, \text{tanh}\left(10 (\alpha x_0 - x_2)\right) \, \left( \frac{ 1 }{ 2 }\text{tanh}(10 x_2) + \frac{ 1 }{ 2 } \right) \approx ? -10 \, \mu_0 \, \text{sech}\left(10 (\alpha \mu_0 - \mu_2)\right) \, \text{tanh}\left(10 (\alpha \mu_0 - \mu_2)\right) \, \left( \frac{ 1 }{ 2 }\text{tanh}(10 \mu_2) + \frac{ 1 }{ 2 } \right)
+# \end{align}
+# $$
+# ## Learning of the $\nu$ parameter
+# $$
+# \nu(t+dt) = \nu (t) - dt \eta_{\nu} \frac{ \partial F }{ \partial \nu }
+# $$
+# with
+# $$
+# \frac{ \partial F }{ \partial \nu } = - \mu_0 \frac{ \varepsilon_{\mu_2} }{ \Sigma_{\mu_2} } - \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} }\frac{ \partial g(\vec{\mu}, \nu) }{ \partial \nu  } =
+#   - \mu_0 \frac{ \varepsilon_{\mu_2} }{ \Sigma_{\mu_2} } - \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} } \left[ -10 \, \mu_0 \, \text{sech}\left(10 (\nu \mu_0 - \mu_2)\right) \, \text{tanh}\left(10 (\nu \mu_0 - \mu_2)\right) \, \left( \frac{ 1 }{ 2 }\text{tanh}(10 \mu_2) + \frac{ 1 }{ 2 } \right) \right]
+# $$
 #%%
 # Generative model class
 class GenMod:
