@@ -176,8 +176,8 @@ class GP:
 # ## Action
 # the agent modifies a certain variable of the GP (in our case the alpha parameter) by a quantity given by
 # $$
-# a = dt \eta_a \left( \frac{ \partial F }{ \partial s_0 }\frac{ \partial s_0 }{ \partial \alpha  } + \frac{ \partial F }{ \partial s_1 }\frac{ \partial s_1 }{ \partial \alpha  } \right)
-#       = dt \eta_a \left( \frac{ \varepsilon_{s_0} }{ \Sigma_{s_0} }\frac{ \partial s_0 }{ \partial \alpha  } + \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} }\frac{ \partial s_1 }{ \partial \alpha  } \right)
+# a = -dt \eta_a \left( \frac{ \partial F }{ \partial s_0 }\frac{ \partial s_0 }{ \partial \alpha  } + \frac{ \partial F }{ \partial s_1 }\frac{ \partial s_1 }{ \partial \alpha  } \right)
+#       = -dt \eta_a \left( \frac{ \varepsilon_{s_0} }{ \Sigma_{s_0} }\frac{ \partial s_0 }{ \partial \alpha  } + \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} }\frac{ \partial s_1 }{ \partial \alpha  } \right)
 # $$
 # with
 # $$
@@ -211,9 +211,9 @@ class GM:
         # Vector \dot{\vec{\mu}}={\dot{\mu_0}, \dot{\mu_1}, \dot{\mu_2}} inizialized with the right ones
         self.dmu = np.array([0., -self.omega2, (self.nu*self.mu[0]-self.mu[2])])
         # Variances (inverse of precisions) of sensory input (the first one proprioceptive and the second one touch)
-        self.Sigma_s = np.array([0.01, 10000])
+        self.Sigma_s = np.array([10, 10])
         # Internal variables precisions
-        self.Sigma_mu = np.array([0.01, 0.01, 0.01])
+        self.Sigma_mu = np.array([0.01, 0.01, 0.005])
         # Action variable (in this case the action is intended as the increment of the variable that the agent is allowed to modified)
         self.da = 0
         # Size of a simulation step
@@ -265,9 +265,8 @@ class GM:
             self.PE_mu[2]/self.Sigma_mu[2]
         ])
         # Action update
-        dF_da = (self.mu[0]-self.mu[1])/(self.omega2+1)*self.PE_s[0]/self.Sigma_s[0] + \
-            self.mu[0] * self.PE_s[1]/self.Sigma_s[1]
-        self.da = -self.dt*eta_a*dF_da
+        self.dF_da = np.array([ self.mu[0]*self.PE_s[0]/self.Sigma_s[0] , self.mu[0] * self.PE_s[1]/self.Sigma_s[1] ])
+        self.da = -self.dt*eta_a*(self.dF_da[0] + self.dF_da[1])
 
         # Learning internal parameter nu
         #dF_dnu = -self.mu[0]*self.PE_mu[2]/self.Sigma_mu[2] + self.mu[0]* self.PE_s[1]/self.Sigma_s[1]
@@ -293,17 +292,17 @@ if __name__ == "__main__":
     dt = 0.005
     n_steps = 20000
     gp = GP(dt=dt, omega2_GP=0.5, alpha=1)
-    gm = GM(dt=dt, eta=0.1, eta_d=1, eta_a=0.004, eta_nu=0.1, omega2_GM=0.5, nu=1)
+    gm = GM(dt=dt, eta=0.01, eta_d=1, eta_a=0.1, eta_nu=0.1, omega2_GM=0.5, nu=1)
 
     data_GP = []
     data_GM = []
     a = 0.
     for step in np.arange(n_steps):
         a = gm.update(gp.s)
-        gp.update(0)
+        gp.update(a)
         data_GP.append([gp.x[2], gp.a, gp.s[0], gp.s[1], gp.x[0]])
         data_GM.append([gm.mu[2], gm.nu, gm.PE_mu[0], gm.PE_mu[1], gm.PE_mu[2],
-                        gm.PE_s[0], gm.PE_s[1], gm.dmu[2], gm.mu[0]])
+                        gm.PE_s[0], gm.PE_s[1], gm.dmu[2], gm.mu[0], gm.dF_da[0], gm.dF_da[1] ])
     data_GP = np.vstack(data_GP)
     data_GM = np.vstack(data_GM)
     platform = gp.platform_for_graph()
@@ -327,6 +326,11 @@ plt.ylim(bottom=-2, top=2)
 plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
 plt.show()
 
+#%%
+plt.figure(figsize=(20, 10))
+plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 9], label=r"$\frac{ 1 }{ \Sigma_{s_0} } \, \frac{ d\varepsilon_{s_0} }{ da }$")
+plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 10], label=r"$\frac{ 1 }{ \Sigma_{s_1} } \, \frac{ d\varepsilon_{s_1} }{ da }$")
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
 # %%
 plt.figure(figsize=(12, 8))
 plt.subplot(211)
