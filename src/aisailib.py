@@ -1,21 +1,14 @@
 import numpy as np
 import matplotlib.pyplot as plt
-rng = np.random.RandomState()
+rng = np.random.RandomState(42)
 
 def sech(x):
-    return 2/(np.exp(x)+np.exp(-x))
+    return 1/np.cosh(x)
+
 
 def tanh(x):
-    return (np.exp(2*x)-1)/(np.exp(2*x)+1)
+    return np.tanh(x)
 
-
-def f(x, a, h):
-    return a - h*x + np.pi/2
-
-
-def p2std(p):
-    return 10000*np.exp(-p)
-p2std(9.)
 # %%
 
 
@@ -25,8 +18,6 @@ class GP:
     Implementation of the generative process :
 
     Attributes:
-        pi_s: (float) Precision of sensory probabilities.
-        pi_x: (float) Precision of hidden states probabilities.
         h: (float) Integration step of hidden states dynamics.
         gamma: (float) Attenuation factor of sensory prediction error.
         mu_s: (float)  sensory channel (central value).

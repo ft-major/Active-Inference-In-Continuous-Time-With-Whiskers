@@ -2,23 +2,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 rng = np.random.RandomState(42)
 
-
 def sech(x):
-    return 2/(np.exp(x)+np.exp(-x))
+    return 1/np.cosh(x)
 
 
 def tanh(x):
-    return (np.exp(2*x)-1)/(np.exp(2*x)+1)
+    return np.tanh(x)
 
-
-def f(x, a, h):
-    return a - h*x + np.pi/2
-
-
-def p2std(p):
-    return 10000*np.exp(-p)
-
-# p2std(9)
 # %% md
 # # Generative Process
 # $$
@@ -211,7 +201,7 @@ class GM:
         # Vector \dot{\vec{\mu}}={\dot{\mu_0}, \dot{\mu_1}, \dot{\mu_2}} inizialized with the right ones
         self.dmu = np.array([0., -self.omega2, (self.nu*self.mu[0]-self.mu[2])])
         # Variances (inverse of precisions) of sensory input (the first one proprioceptive and the second one touch)
-        self.Sigma_s = np.array([10, 10])
+        self.Sigma_s = np.array([0.005, 0.05])
         # Internal variables precisions
         self.Sigma_mu = np.array([0.01, 0.01, 0.005])
         # Action variable (in this case the action is intended as the increment of the variable that the agent is allowed to modified)
@@ -240,7 +230,10 @@ class GM:
         # Returns action increment
 
         self.s = sensory_states
-        eta, eta_d, eta_a, eta_nu = (self.eta[0], self.eta[1], self.eta[2], self.eta[3])
+        eta, eta_d, eta_a, eta_nu = (np.array([0.8*self.eta[0], 0.8*self.eta[0], self.eta[0]]), \
+                                     np.array([1.5*self.eta[1], 1.5*self.eta[1], self.eta[1]]), \
+                                     self.eta[2], \
+                                     self.eta[3])
         self.PE_mu = np.array([
             self.dmu[0]-self.mu[1],
             self.dmu[1]+self.omega2*self.mu[0],
@@ -252,9 +245,9 @@ class GM:
         ])
 
         self.dF_dmu = np.array([
-            self.omega2*self.PE_mu[1]/self.Sigma_mu[1] - self.nu*self.PE_mu[2]/self.Sigma_mu[2] \
-                - self.dg_dmu0(x=self.mu[2], v=(self.nu*self.mu[0]-self.mu[2]), dv_dmu0=self.nu)*self.PE_s[1]/self.Sigma_s[1],
-            -self.PE_mu[0]/self.Sigma_mu[0],
+            (self.omega2*self.PE_mu[1]/self.Sigma_mu[1] - self.nu*self.PE_mu[2]/self.Sigma_mu[2] \
+                - self.dg_dmu0(x=self.mu[2], v=(self.nu*self.mu[0]-self.mu[2]), dv_dmu0=self.nu)*self.PE_s[1]/self.Sigma_s[1]),
+            (-self.PE_mu[0]/self.Sigma_mu[0]),
             self.PE_mu[2]/self.Sigma_mu[2] - self.PE_s[0]/self.Sigma_s[0] \
                 - self.dg_dmu2(x=self.mu[2], v=(self.nu*self.mu[0]-self.mu[2]))*self.PE_s[1]/self.Sigma_s[1]
         ])
@@ -266,11 +259,11 @@ class GM:
         ])
         # Action update
         self.dF_da = np.array([ self.mu[0]*self.PE_s[0]/self.Sigma_s[0] , self.mu[0] * self.PE_s[1]/self.Sigma_s[1] ])
-        self.da = -self.dt*eta_a*(self.dF_da[0] + self.dF_da[1])
+        self.da = -self.dt*eta_a*(self.dF_da[1] + 0.001*self.dF_da[0])
 
         # Learning internal parameter nu
-        #dF_dnu = -self.mu[0]*self.PE_mu[2]/self.Sigma_mu[2] + self.mu[0]* self.PE_s[1]/self.Sigma_s[1]
-        #self.nu += -self.dt*eta_nu*dF_dnu
+        dF_dnu = -self.mu[0]*self.PE_mu[2]/self.Sigma_mu[2] + self.mu[0]* self.PE_s[1]/self.Sigma_s[1]
+        self.nu += -self.dt*eta_nu*dF_dnu
 
         # Internal variables update
         self.mu += self.dt*(self.dmu - eta*self.dF_dmu)
@@ -281,7 +274,7 @@ class GM:
 
 
         # Efference copy
-        self.nu += self.da
+        #self.nu += self.da
 
         return self.da
 
@@ -290,9 +283,9 @@ class GM:
 
 if __name__ == "__main__":
     dt = 0.005
-    n_steps = 20000
+    n_steps = 20000+5000
     gp = GP(dt=dt, omega2_GP=0.5, alpha=1)
-    gm = GM(dt=dt, eta=0.01, eta_d=1, eta_a=0.1, eta_nu=0.1, omega2_GM=0.5, nu=1)
+    gm = GM(dt=dt, eta=0.01, eta_d=1., eta_a=0.01, eta_nu=0.01, omega2_GM=0.5, nu=1)
 
     data_GP = []
     data_GM = []
@@ -310,19 +303,37 @@ if __name__ == "__main__":
 plt.figure(figsize=(20, 10))
 plt.subplot(211)
 plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 0], c="red", lw=2, ls="dashed", label=r"$x_2$")
-plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 4], c="blue", lw=2, ls="dashed", label=r"$x_0$")
+#plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 4], c="blue", lw=2, ls="dashed", label=r"$x_0$")
 plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 1], c="#aa6666", lw=4, label=r"\alpha")
-plt.plot(platform[:,0], platform[:,1], c="black", lw=0.5, label="platform")
-plt.ylim(bottom=-2, top=2)
+plt.plot(platform[:,0], platform[:,1], c="black", lw=2, label="platform")
+#plt.ylim(bottom=-1.8, top=4)
 plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
 plt.subplot(212)
 plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 0],
-         c="green", lw=1, ls="dashed", label=r"$\mu_2$")
-#plt.plot(np.arange(0,n_steps*dt,dt), data_GM[:, 7], lw=1, ls="dashed", label=r"$\dot{\mu}_2$")
+         c="green", lw=2, ls="dashed", label=r"$\mu_2$")
+plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 1], c="#66aa66", lw=3, label=r"\nu")
+#plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 8], c="blue", lw=2, ls="dashed", label=r"$\mu_0$")
+plt.plot(platform[:,0], platform[:,1], c="black", lw=2, label="platform")
+#plt.ylim(bottom=-1.8, top=4)
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+plt.show()
+
+# %%
+plt.figure(figsize=(20, 10))
+plt.subplot(211)
+plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 0], c="red", lw=2, ls="dashed", label=r"$x_2$")
+plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 4], c="blue", lw=2, ls="dashed", label=r"$x_0$")
+plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 1], c="#aa6666", lw=4, label=r"\alpha")
+plt.plot(platform[:,0], platform[:,1], c="black", lw=2, label="platform")
+#plt.ylim(bottom=-1.8, top=4)
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+plt.subplot(212)
+plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 0],
+         c="green", lw=2, ls="dashed", label=r"$\mu_2$")
 plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 1], c="#66aa66", lw=3, label=r"\nu")
 plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 8], c="blue", lw=2, ls="dashed", label=r"$\mu_0$")
-plt.plot(platform[:,0], platform[:,1], c="black", lw=0.5, label="platform")
-plt.ylim(bottom=-2, top=2)
+plt.plot(platform[:,0], platform[:,1], c="black", lw=2, label="platform")
+#plt.ylim(bottom=-1.8, top=4)
 plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
 plt.show()
 
@@ -368,6 +379,7 @@ plt.subplot(212)
 plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 6], label=r"$PE_{s 1}$")
 plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
 plt.show()
+#%%
 
 
 # %% Testing touch function
