@@ -6,6 +6,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 rng = np.random.RandomState(42)
 
+def sech(x):
+    return 1/np.cosh(x)
+
+
+def tanh(x):
+    return np.tanh(x)
 
 # %% md
 # # Generative Process
@@ -80,6 +86,14 @@ class GenProc:
         self.s[0] += self.Sigma_s*rng.randn()
         return self.s
 
+    # Function that generates the array to graph the platform
+    def platform_for_graph(self):
+        plat = []
+        for t in np.arange(0., self.t, self.dt):
+            if t in self.platform_interval:
+                plat.append([t, self.platform_position])
+        return np.vstack(plat)
+
 # %% md
 # # Generative Model
 # ## Agent beliefs
@@ -150,8 +164,8 @@ class GenProc:
 # ## Action
 # the agent modifies a certain variable of the GP (in our case the alpha parameter) by a quantity given by
 # $$
-# a = dt \eta_a \left( \frac{ \partial F }{ \partial s_0 }\frac{ \partial s_0 }{ \partial \alpha  } + \frac{ \partial F }{ \partial s_1 }\frac{ \partial s_1 }{ \partial \alpha  } \right)
-#       = dt \eta_a \left( \frac{ \varepsilon_{s_0} }{ \Sigma_{s_0} }\frac{ \partial s_0 }{ \partial \alpha  } + \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} }\frac{ \partial s_1 }{ \partial \alpha  } \right)
+# a = -dt \eta_a \left( \frac{ \partial F }{ \partial s_0 }\frac{ \partial s_0 }{ \partial \alpha  } + \frac{ \partial F }{ \partial s_1 }\frac{ \partial s_1 }{ \partial \alpha  } \right)
+#       = -dt \eta_a \left( \frac{ \varepsilon_{s_0} }{ \Sigma_{s_0} }\frac{ \partial s_0 }{ \partial \alpha  } + \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} }\frac{ \partial s_1 }{ \partial \alpha  } \right)
 # $$
 # with
 # $$
