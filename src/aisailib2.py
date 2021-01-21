@@ -241,15 +241,15 @@ class GM:
         ])
         self.PE_s = np.array([
             self.s[0]-self.mu[2],
-            self.s[1]-self.g_touch(x=self.mu[2], v=(self.nu*self.mu[0]-self.mu[2]))  # v=self.dmu[2]?
+            self.s[1]-self.g_touch(x=self.mu[2], v=self.dmu[2])  # v=self.nu*self.mu[0]-self.mu[2] or v=self.dmu[2]?
         ])
 
         self.dF_dmu = np.array([
             (self.omega2*self.PE_mu[1]/self.Sigma_mu[1] - self.nu*self.PE_mu[2]/self.Sigma_mu[2] \
-                - self.dg_dmu0(x=self.mu[2], v=(self.nu*self.mu[0]-self.mu[2]), dv_dmu0=self.nu)*self.PE_s[1]/self.Sigma_s[1]),
+                - self.dg_dmu0(x=self.mu[2], v=self.dmu[2], dv_dmu0=self.nu)*self.PE_s[1]/self.Sigma_s[1]),
             (-self.PE_mu[0]/self.Sigma_mu[0]),
             self.PE_mu[2]/self.Sigma_mu[2] - self.PE_s[0]/self.Sigma_s[0] \
-                - self.dg_dmu2(x=self.mu[2], v=(self.nu*self.mu[0]-self.mu[2]))*self.PE_s[1]/self.Sigma_s[1]
+                - self.dg_dmu2(x=self.mu[2], v=self.dmu[2])*self.PE_s[1]/self.Sigma_s[1]
         ])
 
         self.dF_d_dmu = np.array([
@@ -262,8 +262,9 @@ class GM:
         self.da = -self.dt*eta_a*(self.dF_da[1] + 0.001*self.dF_da[0])
 
         # Learning internal parameter nu
-        dF_dnu = -self.mu[0]*self.PE_mu[2]/self.Sigma_mu[2] + self.mu[0]* self.PE_s[1]/self.Sigma_s[1]
-        self.nu += -self.dt*eta_nu*dF_dnu
+        self.dF_dnu = np.array([-self.mu[0]*self.PE_mu[2]/self.Sigma_mu[2], -self.dg_dmu0(x=self.mu[0], v=self.dmu[2], dv_dmu0=self.mu[0])* self.PE_s[1]/self.Sigma_s[1] ])
+        #self.dF_dnu = np.array([-self.mu[0]*self.PE_mu[2]/self.Sigma_mu[2], -self.mu[0]* self.PE_s[1]/self.Sigma_s[1] ])
+        #self.nu += -self.dt*eta_nu* (self.dF_dnu[0] + self.dF_dnu[1])
 
         # Internal variables update
         self.mu += self.dt*(self.dmu - eta*self.dF_dmu)
@@ -274,7 +275,7 @@ class GM:
 
 
         # Efference copy
-        #self.nu += self.da
+        self.nu += self.da
 
         return self.da
 
@@ -303,7 +304,7 @@ if __name__ == "__main__":
 plt.figure(figsize=(20, 10))
 plt.subplot(211)
 plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 0], c="red", lw=2, ls="dashed", label=r"$x_2$")
-#plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 4], c="blue", lw=2, ls="dashed", label=r"$x_0$")
+#plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 4], c="blue", lw=2, 0.1*ls="dashed", label=r"$x_0$")
 plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 1], c="#aa6666", lw=4, label=r"\alpha")
 plt.plot(platform[:,0], platform[:,1], c="black", lw=2, label="platform")
 #plt.ylim(bottom=-1.8, top=4)
@@ -333,6 +334,7 @@ plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 0],
 plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 1], c="#66aa66", lw=3, label=r"\nu")
 plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 8], c="blue", lw=2, ls="dashed", label=r"$\mu_0$")
 plt.plot(platform[:,0], platform[:,1], c="black", lw=2, label="platform")
+plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 10]*gm.Sigma_s[1], c="orange", label=r"$\, \frac{ d\varepsilon_{s_1} }{ da }$")
 #plt.ylim(bottom=-1.8, top=4)
 plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
 plt.show()
