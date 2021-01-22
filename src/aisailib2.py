@@ -258,13 +258,13 @@ class GM:
             self.PE_mu[2]/self.Sigma_mu[2]
         ])
         # Action update
-        self.dF_da = np.array([ self.mu[0]*self.PE_s[0]/self.Sigma_s[0] , self.mu[0] * self.PE_s[1]/self.Sigma_s[1] ])
-        self.da = -self.dt*eta_a*(self.dF_da[1] + 0.001*self.dF_da[0])
+        self.dF_da = np.array([ self.mu[0]*self.PE_s[0]/self.Sigma_s[0] , self.dg_dmu0(x=self.mu[0], v=self.dmu[2], dv_dmu0=self.mu[0])*self.PE_s[1]/self.Sigma_s[1] ]) #self.mu[0] * self.PE_s[1]/self.Sigma_s[1] ])
+        self.da = -self.dt*eta_a*(0.01*self.dF_da[0] + self.dF_da[1])
 
         # Learning internal parameter nu
         self.dF_dnu = np.array([-self.mu[0]*self.PE_mu[2]/self.Sigma_mu[2], -self.dg_dmu0(x=self.mu[0], v=self.dmu[2], dv_dmu0=self.mu[0])* self.PE_s[1]/self.Sigma_s[1] ])
         #self.dF_dnu = np.array([-self.mu[0]*self.PE_mu[2]/self.Sigma_mu[2], -self.mu[0]* self.PE_s[1]/self.Sigma_s[1] ])
-        #self.nu += -self.dt*eta_nu* (self.dF_dnu[0] + self.dF_dnu[1])
+        #self.nu += -self.dt*eta_nu* (self.dF_dnu[0] + 0.001*self.dF_dnu[1])
 
         # Internal variables update
         self.mu += self.dt*(self.dmu - eta*self.dF_dmu)
