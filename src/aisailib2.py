@@ -58,6 +58,9 @@ class GP:
         # Time interval in which the platform appears
         self.platform_interval = [15, 75]
 
+    def touch(self, x, platform_position, prec=30):
+        return 0.5 * tanh(prec*(x-platform_position)) + 0.5
+
     # Function that implement dynamics of the process.
     def update(self, action):
         # Action argument (double) is the variable that comes from the GM that modifies alpha
@@ -73,11 +76,9 @@ class GP:
         self.x[2] += self.dt*(self.a*self.x[0] - self.x[2])
         # Platform Action
         if self.t > self.platform_interval[0] and self.t < self.platform_interval[1]:
-            if self.x[2] > self.platform_position:
-                self.s[1] = 1.
+            self.s[1] = self.touch(self.x[2], self.platform_position)
+            if self.x[2]>self.platform_position:
                 self.x[2] = self.platform_position
-            else:
-                self.s[1] = 0.
         else:
             self.s[1] = 0.
         self.s[0] = self.x[2] + self.Sigma_s*rng.randn()
@@ -258,7 +259,8 @@ class GM:
             self.PE_mu[2]/self.Sigma_mu[2]
         ])
         # Action update
-        self.dF_da = np.array([ self.mu[0]*self.PE_s[0]/self.Sigma_s[0] , self.dg_dmu0(x=self.mu[0], v=self.dmu[2], dv_dmu0=self.mu[0])*self.PE_s[1]/self.Sigma_s[1] ]) #self.mu[0] * self.PE_s[1]/self.Sigma_s[1] ])
+        self.dF_da = np.array([ self.mu[0]*self.PE_s[0]/self.Sigma_s[0] , self.mu[0] * self.PE_s[1]/self.Sigma_s[1] ])
+        #self.dF_da = np.array([ self.mu[0]*self.PE_s[0]/self.Sigma_s[0] , self.dg_dmu0(x=self.mu[0], v=self.dmu[2], dv_dmu0=self.mu[0])*self.PE_s[1]/self.Sigma_s[1] ]) #self.mu[0] * self.PE_s[1]/self.Sigma_s[1] ])
         self.da = -self.dt*eta_a*(0.01*self.dF_da[0] + self.dF_da[1])
 
         # Learning internal parameter nu
