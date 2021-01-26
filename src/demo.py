@@ -1,6 +1,6 @@
 from plotter import Plotter, PredErrPlotter
 from sim import Sim, a2xy
-from aisailib import GP, GM
+from aisailib2 import GP, GM
 import numpy as np
 
 
@@ -26,10 +26,10 @@ for type in ["still"]:
 
     print("simulating", type, "...")
 
-    stime = 200000
+    stime = 20000
 
-    gp = GP(dt=0.0005, freq=0.5, amp=1.2)
-    gm = GM(dt=0.0005, eta=0.001, eta_d=1800, freq=0.5, amp=1.2)
+    gp = GP(dt=0.005, omega2_GP=0.5, alpha=1)
+    gm = GM(dt=0.005, eta=0.01, eta_d=1., eta_a=0.01, eta_nu=0.01, omega2_GM=0.5, nu=1)
 
     points = (normal_box if type == "normal" or
               type == "still" else large_box)
@@ -82,12 +82,12 @@ for type in ["still"]:
         collision, curr_angle_limit = sim.move_box(box_pos)
 
         # update process
-        gp.mu_x[2] = np.minimum(curr_angle_limit, gp.mu_x[2])
+        gp.x[2] = np.minimum(curr_angle_limit, gp.x[2])
         gp.update(delta_action)
 
         # get state
-        sens[t] = gp.mu_x[2]
-        sens_model[t] = gm.mu_x[2]
+        sens[t] = gp.x[2]
+        sens_model[t] = gm.mu[2]
         ampl[t] = gp.a
         ampl_model[t] = gm.nu
         current_touch += 0.03*(collision - current_touch)
@@ -95,7 +95,7 @@ for type in ["still"]:
         # update model and action
         delta_action = gm.update([sens[t], current_touch])
 
-        touch[t] = gm.touch
+        touch[t] = gm.g_touch(gm.mu[2], gm.dmu[2])
 
         # plot
         if t % int(stime/200) == 0 or t == stime - 1:
