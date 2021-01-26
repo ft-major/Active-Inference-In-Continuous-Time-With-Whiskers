@@ -90,6 +90,43 @@ class GP:
                 plat.append([t, self.platform_position])
         return np.vstack(plat)
 
+# Generative Process Class
+class GPSimple:
+
+    def __init__(self, dt, omega2_GP=0.5, alpha=1):
+
+        # Harmonic oscillator angular frequency (both x_0 and x_2)
+        self.omega2 = omega2_GP
+        # Harmonic oscillator amplitude (no really)
+        self.a = alpha
+        # Vector x={x_0, x_1, x_2} initialized with his initial conditions
+        self.x = np.array([1., 0.,1/1.5])
+        # Array storing respectively proprioceptive sensory input (initialized with the real value x_2) and touch sensory input
+        self.s = np.array([self.a/(self.omega2 + 1), 0.])
+        # Variance of the Gaussian noise that gives proprioceptive sensory input
+        self.Sigma_s = 0.01
+        # Size of a simulation step
+        self.dt = dt
+        # Time variable
+        self.t = 0
+
+
+    # Function that implement dynamics of the process.
+    def update(self, action):
+        # Action argument (double) is the variable that comes from the GM that modifies alpha
+        # variable affecting the amplitude of the oscillation.
+
+        # Increment of time variable
+        self.t += self.dt
+        # Increment of alpha variable (that changes the amplitude) given by agent's action
+        self.a += action
+        # GP dynamics implementation
+        self.x[0] += self.dt*(self.x[1])
+        self.x[1] += self.dt*(-self.omega2*self.x[0])
+        self.x[2] += self.dt*(self.a*self.x[0] - self.x[2])
+
+        self.s[0] = self.x[2] + self.Sigma_s*rng.randn()
+
 
 # %% md
 # # Generative Model
@@ -213,15 +250,15 @@ class GM:
         self.eta = np.array([eta, eta_d, eta_a, eta_nu])
 
     # Touch function
-    def g_touch(self, x, v, prec=10):
+    def g_touch(self, x, v, prec=100):
         return sech(prec*v)*(0.5*tanh(prec*x)+0.5)
 
     # Derivative of the touch function with respect to \mu_0
-    def dg_dmu0(self, x, v, dv_dmu0, prec=10):
+    def dg_dmu0(self, x, v, dv_dmu0, prec=100):
         return -prec*dv_dmu0*sech(prec*v)*tanh(prec*v)*(0.5 * tanh(prec*x) + 0.5)
 
     # Derivative of the touch function with respect to \mu_2
-    def dg_dmu2(self, x, v, prec=10, dx_dmu2=1, dv_dmu2=-1):
+    def dg_dmu2(self, x, v, prec=100, dx_dmu2=1, dv_dmu2=-1):
         return -prec*dv_dmu2*sech(prec*v)*tanh(prec*v)*(0.5 * tanh(prec*x) + 0.5) + sech(prec*v)*5*dx_dmu2*(sech(prec*x))**2
 
     # Function that implement the update of internal variables.
@@ -261,7 +298,7 @@ class GM:
         # Action update
         self.dF_da = np.array([ self.mu[0]*self.PE_s[0]/self.Sigma_s[0] , self.mu[0] * self.PE_s[1]/self.Sigma_s[1] ])
         #self.dF_da = np.array([ self.mu[0]*self.PE_s[0]/self.Sigma_s[0] , self.dg_dmu0(x=self.mu[0], v=self.dmu[2], dv_dmu0=self.mu[0])*self.PE_s[1]/self.Sigma_s[1] ]) #self.mu[0] * self.PE_s[1]/self.Sigma_s[1] ])
-        self.da = -self.dt*eta_a*(0.01*self.dF_da[0] + self.dF_da[1])
+        self.da = -self.dt*eta_a*(0*self.dF_da[0] + self.dF_da[1])
 
         # Learning internal parameter nu
         self.dF_dnu = np.array([-self.mu[0]*self.PE_mu[2]/self.Sigma_mu[2], -self.dg_dmu0(x=self.mu[0], v=self.dmu[2], dv_dmu0=self.mu[0])* self.PE_s[1]/self.Sigma_s[1] ])

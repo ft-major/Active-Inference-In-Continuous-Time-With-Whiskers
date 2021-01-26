@@ -130,7 +130,9 @@ class Sim:
                     box_height_whisk_angle + self.whisker_base_angle)
                 curr_angle_limit = box_height_whisk_angle
 
-            collision = True
+        curr_whisker_angle = np.abs(ik_angle(self.whisker_vertices[0],
+            self.whisker_vertices[1]))
+        collision =  curr_whisker_angle >= curr_angle_limit
 
         return collision, curr_angle_limit
 

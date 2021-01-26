@@ -1,6 +1,6 @@
 from plotter import Plotter, PredErrPlotter
 from sim import Sim, a2xy
-from aisailib2 import GP, GM
+from aisailib2 import GPSimple as GP, GM
 import numpy as np
 
 
@@ -22,17 +22,17 @@ large_box = np.array([
     (sidewidth, sideheight),
     (-sidewidth, sideheight)]) + center
 
-for type in ["still"]:
+for type in ["touch"]:
 
     print("simulating", type, "...")
 
     stime = 20000
 
-    gp = GP(dt=0.005, omega2_GP=0.5, alpha=1)
-    gm = GM(dt=0.005, eta=0.01, eta_d=1., eta_a=0.01, eta_nu=0.01, omega2_GM=0.5, nu=1)
+    gp = GP(dt=0.005, omega2_GP=0.6, alpha=1)
+    gm = GM(dt=0.005, eta=.08, eta_d=1., eta_a=0.02, eta_nu=0.02, omega2_GM=0.6, nu=1)
 
     points = (normal_box if type == "normal" or
-              type == "still" else large_box)
+              type == "touch" else large_box)
     sim = Sim("demo_"+type, points=points)
 
     prederr = PredErrPlotter("prederr", type, stime)
@@ -58,24 +58,26 @@ for type in ["still"]:
 
     frame = 0
     current_touch = 0
+
+    START_MOVE_AHEAD = stime*(16/100)
+    STOP_MOVE_AHEAD = stime*(23/100)
+    START_MOVE_BEHIND = stime*(80/100)
+    STOP_MOVE_BEHIND = stime*(90/100)
+
     for t in range(stime):
 
-        # compute box position
-        if type == "normal" or type == "large":
-            box_pos = np.array([0, 1.3 + 1.6*np.exp(-3*t/stime)])
+        if t < stime*(16/100):
+            box_pos = np.array([0, 5])
+        elif START_MOVE_AHEAD < t < STOP_MOVE_AHEAD:
+            e = np.exp(-(t - START_MOVE_AHEAD)/(stime*(10/100)))
+            box_pos = np.array([0, 1.3 + 3.7 * e])
+        elif STOP_MOVE_AHEAD < t < START_MOVE_BEHIND:
+            box_pos = np.array([0, 1.3])
+        elif START_MOVE_BEHIND < t < STOP_MOVE_BEHIND:
+            e = np.exp(-(t -START_MOVE_BEHIND)/(stime*(10/100)))
+            box_pos = np.array([0, 1.3 + 3.7 * (1 - e)])
         else:
-            if t < stime*(16/100):
-                box_pos = np.array([0, 5])
-            elif stime*(16/100) < t < stime*(26/100):
-                e = np.exp(-(t - stime*(46/100))/(stime*(10/100)))
-                box_pos = np.array([0, 1.2 + 3.8 * e])
-            elif stime*(20/100) < t < stime*(60/100):
-                box_pos = np.array([0, 1.2])
-            elif stime*(60/100) < t < stime*(70/100):
-                e = np.exp(-(t - stime*(60/100))/(stime*(10/100)))
-                box_pos = np.array([0, 1.2 + 3.8 * (1 - e)])
-            else:
-                box_pos = np.array([0, 5])
+            box_pos = np.array([0, 5])
         sim.move_box(box_pos)
 
         # move and conpute collision
@@ -86,14 +88,13 @@ for type in ["still"]:
         gp.update(delta_action)
 
         # get state
-        sens[t] = gp.x[2]
+        sens[t] = gp.s[0]
         sens_model[t] = gm.mu[2]
         ampl[t] = gp.a
         ampl_model[t] = gm.nu
-        current_touch += 0.03*(collision - current_touch)
 
         # update model and action
-        delta_action = gm.update([sens[t], current_touch])
+        delta_action = gm.update([sens[t], 1*collision])
 
         touch[t] = gm.g_touch(gm.mu[2], gm.dmu[2])
 
@@ -106,12 +107,11 @@ for type in ["still"]:
             sim.set_box()
             sim.update(sens[t], sens_model[t])
 
-            prederr.update([sens[t], sens_model[t]], t)
-            genProcPlot.update([sens[t], ampl[t],
-                                curr_angle_limit if collision
-                                is True else None, 0], t)
-            genModPlot.update([sens_model[t], ampl_model[t],
-                               curr_angle_limit if collision
-                               is True else None, 0], t)
+            wall = curr_angle_limit if \
+                t>=STOP_MOVE_AHEAD and t<=START_MOVE_BEHIND \
+                else None
+            prederr.update([1*collision, touch[t]], t)
+            genProcPlot.update([sens[t], ampl[t], wall, 0], t)
+            genModPlot.update([sens_model[t], ampl_model[t], wall, 0], t)
 
     np.savetxt(type+"_touch", touch)
