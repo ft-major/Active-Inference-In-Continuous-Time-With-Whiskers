@@ -56,9 +56,9 @@ class GP:
         # Platform position (when is present) with respect to x_2 variable
         self.platform_position = 0.5
         # Time interval in which the platform appears
-        self.platform_interval = [15, 75]
+        self.platform_interval = [15, 90]
 
-    def touch(self, x, platform_position, prec=30):
+    def touch(self, x, platform_position, prec=100):
         return 0.5 * tanh(prec*(x-platform_position)) + 0.5
 
     # Function that implement dynamics of the process.
@@ -250,15 +250,15 @@ class GM:
         self.eta = np.array([eta, eta_d, eta_a, eta_nu])
 
     # Touch function
-    def g_touch(self, x, v, prec=100):
+    def g_touch(self, x, v, prec=50):
         return sech(prec*v)*(0.5*tanh(prec*x)+0.5)
 
     # Derivative of the touch function with respect to \mu_0
-    def dg_dmu0(self, x, v, dv_dmu0, prec=100):
-        return -prec*dv_dmu0*sech(prec*v)*tanh(prec*v)*(0.5 * tanh(prec*x) + 0.5)
+    def dg_dmu0(self, x, v, dv_dmu0, prec=50):
+        return prec*dv_dmu0*sech(prec*v)*tanh(prec*v)*(0.5 * tanh(prec*x) + 0.5)
 
     # Derivative of the touch function with respect to \mu_2
-    def dg_dmu2(self, x, v, prec=100, dx_dmu2=1, dv_dmu2=-1):
+    def dg_dmu2(self, x, v, prec=50, dx_dmu2=1, dv_dmu2=-1):
         return -prec*dv_dmu2*sech(prec*v)*tanh(prec*v)*(0.5 * tanh(prec*x) + 0.5) + sech(prec*v)*5*dx_dmu2*(sech(prec*x))**2
 
     # Function that implement the update of internal variables.
@@ -268,8 +268,8 @@ class GM:
         # Returns action increment
 
         self.s = sensory_states
-        eta, eta_d, eta_a, eta_nu = (np.array([0.8*self.eta[0], 0.8*self.eta[0], self.eta[0]]), \
-                                     np.array([1.5*self.eta[1], 1.5*self.eta[1], self.eta[1]]), \
+        eta, eta_d, eta_a, eta_nu = (np.array([1*self.eta[0], 1*self.eta[0], self.eta[0]]), \
+                                     np.array([1*self.eta[1], 1*self.eta[1], self.eta[1]]), \
                                      self.eta[2], \
                                      self.eta[3])
         self.PE_mu = np.array([
@@ -296,8 +296,8 @@ class GM:
             self.PE_mu[2]/self.Sigma_mu[2]
         ])
         # Action update
-        self.dF_da = np.array([ self.mu[0]*self.PE_s[0]/self.Sigma_s[0] , self.mu[0] * self.PE_s[1]/self.Sigma_s[1] ])
-        #self.dF_da = np.array([ self.mu[0]*self.PE_s[0]/self.Sigma_s[0] , self.dg_dmu0(x=self.mu[0], v=self.dmu[2], dv_dmu0=self.mu[0])*self.PE_s[1]/self.Sigma_s[1] ]) #self.mu[0] * self.PE_s[1]/self.Sigma_s[1] ])
+        #self.dF_da = np.array([ self.mu[0]*self.PE_s[0]/self.Sigma_s[0] , self.mu[0] * self.PE_s[1]/self.Sigma_s[1] ])
+        self.dF_da = np.array([ self.mu[0]*self.PE_s[0]/self.Sigma_s[0] , self.dg_dmu0(x=self.mu[0], v=self.dmu[2], dv_dmu0=self.mu[0])*self.PE_s[1]/self.Sigma_s[1] ]) #self.mu[0] * self.PE_s[1]/self.Sigma_s[1] ])
         self.da = -self.dt*eta_a*(0*self.dF_da[0] + self.dF_da[1])
 
         # Learning internal parameter nu
@@ -306,6 +306,9 @@ class GM:
         #self.nu += -self.dt*eta_nu* (self.dF_dnu[0] + 0.001*self.dF_dnu[1])
 
         # Internal variables update
+        #self.mu[0] += self.dt*(self.dmu[0] - eta[0]*self.dF_dmu[0])
+        #self.mu[1] += self.dt*(self.dmu[1] - eta[1]*self.dF_dmu[1])
+        #self.mu[2] += self.dt*(self.dmu[2] - eta[2]*self.dF_dmu[2])
         self.mu += self.dt*(self.dmu - eta*self.dF_dmu)
         self.dmu += -self.dt*eta_d*self.dF_d_dmu
 
@@ -325,7 +328,7 @@ if __name__ == "__main__":
     dt = 0.005
     n_steps = 20000+5000
     gp = GP(dt=dt, omega2_GP=0.5, alpha=1)
-    gm = GM(dt=dt, eta=0.01, eta_d=1., eta_a=0.01, eta_nu=0.01, omega2_GM=0.5, nu=1)
+    gm = GM(dt=dt, eta=0.008, eta_d=1., eta_a=0.1, eta_nu=0.01, omega2_GM=0.5, nu=1)
 
     data_GP = []
     data_GM = []
@@ -339,7 +342,22 @@ if __name__ == "__main__":
     data_GP = np.vstack(data_GP)
     data_GM = np.vstack(data_GM)
     platform = gp.platform_for_graph()
-# %%
+    #%%
+
+    plt.figure(figsize=(20, 10))
+    plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 0],
+             c="green", lw=2, ls="dashed", label=r"$\mu_2$")
+    plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 7],
+                      c="red", lw=2, ls="dashed", label=r"d$\mu_2$")
+    plt.plot(np.arange(0, n_steps*dt, dt), gm.g_touch(x=data_GM[:, 0], v=data_GM[:, 7]), label=r"touch")
+    #plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 1], c="#66aa66", lw=3, label=r"\nu")
+    #plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 8], c="blue", lw=2, ls="dashed", label=r"$\mu_0$")
+    #plt.plot(platform[:,0], platform[:,1], c="black", lw=2, label="platform")
+    #plt.ylim(bottom=-1.8, top=4)
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    plt.show()
+
+    # %%
     plt.figure(figsize=(20, 10))
     plt.subplot(211)
     plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 0], c="red", lw=2, ls="dashed", label=r"$x_2$")
@@ -373,15 +391,15 @@ if __name__ == "__main__":
     plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 1], c="#66aa66", lw=3, label=r"\nu")
     plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 8], c="blue", lw=2, ls="dashed", label=r"$\mu_0$")
     plt.plot(platform[:,0], platform[:,1], c="black", lw=2, label="platform")
-    plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 10]*gm.Sigma_s[1], c="orange", label=r"$\, \frac{ d\varepsilon_{s_1} }{ da }$")
+    #plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 10]*gm.Sigma_s[1], c="orange", label=r"$\, \frac{ d\varepsilon_{s_1} }{ da }$")
     #plt.ylim(bottom=-1.8, top=4)
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
     plt.show()
 
     #%%
     plt.figure(figsize=(20, 10))
-    plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 9], label=r"$\frac{ 1 }{ \Sigma_{s_0} } \, \frac{ d\varepsilon_{s_0} }{ da }$")
-    plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 10], label=r"$\frac{ 1 }{ \Sigma_{s_1} } \, \frac{ d\varepsilon_{s_1} }{ da }$")
+    #plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 9], label=r"$\frac{ 1 }{ \Sigma_{s_0} } \, \frac{ d\varepsilon_{s_0} }{ da }$")
+    plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 10], c = "orange", label=r"$\frac{ 1 }{ \Sigma_{s_1} } \, \frac{ d\varepsilon_{s_1} }{ da }$")
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
     # %%
     plt.figure(figsize=(12, 8))
