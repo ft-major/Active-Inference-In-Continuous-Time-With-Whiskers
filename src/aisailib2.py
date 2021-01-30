@@ -9,16 +9,29 @@ def sech(x):
 def tanh(x):
     return np.tanh(x)
 
+
+# New touch function
+def peak_touch(x, p=15):
+    y = 0.5*(np.tanh(-x)+1)
+    return p/(1 + 1000*y**2)
+
+
+time = np.arange(0, 30, 0.01)
+coseno = 1*np.cos(time)
+peak = peak_touch(coseno)
+plt.plot(time, coseno)
+plt.plot(time, peak)
+
 # %% md
 # # Generative Process
 # $$
-#   \dot{\vec{x}}(t) = f(\vec{x}(t), \alpha) =
-#       \left[\begin{array}{ccc} 0 & 1 & 0 \\ -\omega^2 & 0 & 0 \\ \alpha &0 &-1 \end{array}\right] \cdot \vec{x}(t) =
-#       \left[\begin{array}{c} x_1(t) \\ -\omega^2 x_0(t) \\ \alpha x_0(t) - x_2(t) \end{array}\right] \nonumber
+#   \dot{\vec{x}}(t) = f(\vec{x}(t), \alpha(t)) =
+#       \left[\begin{array}{ccc} 0 & 1 & 0 \\ -\omega^2 & 0 & 0 \\ \alpha(t) &0 &-1 \end{array}\right] \cdot \vec{x}(t) =
+#       \left[\begin{array}{c} x_1(t) \\ -\omega^2 x_0(t) \\ \alpha(t) x_0(t) - x_2(t) \end{array}\right] \nonumber
 # $$
 # ## Initial conditions
 # $$
-# \vec{x}(0) = \left[ \begin{array}{c} x_0(0) \\ x_1(0) \\ x_2(0) \end{array} \right] = \left[ \begin{array}{c} 1 \\ 0 \\ \frac{ \alpha }{ \omega^2 +1 } \end{array} \right]
+# \vec{x}(0) = \left[ \begin{array}{c} x_0(0) \\ x_1(0) \\ x_2(0) \end{array} \right] = \left[ \begin{array}{c} 1 \\ 0 \\ \frac{ \alpha(0) }{ \omega^2 +1 } \end{array} \right]
 # $$
 # ## Solution
 # $$
@@ -30,6 +43,10 @@ def tanh(x):
 # From $x_2$ is extracted the proprioceptive sensory input
 # $$
 # s_0 (t) = x_2(t) + \mathcal{N}(s_0;0,\Sigma_{s_0}^{GP})
+# $$
+# and the following function of angle and platform position (in whisker angle space) is given the touch sensory input
+# $$
+# s_1 (t) = \frac{ 1 }{ 2 } \text{tanh}(100(x_2-x_{platform}) + 1)
 # $$
 
 # %%
@@ -141,7 +158,7 @@ class GPSimple:
 #       \left[\begin{array}{c} 0 \\ 0 \\ 1 \end{array} \right]^T \cdot \vec{\mu}(t) + \mathcal{N}(s_p; 0, \Sigma_{s_0})
 # $$
 # $$
-# s_t(\vec{\mu}(t), \nu) = g(\vec{\mu}(t),\nu) + \mathcal{N}(s_t; 0, \Sigma_{s_1}) =
+# s_t(\vec{\mu}(t), \vec{\dot{ \mu }}(t), \nu) = g(\vec{\mu}(t), \vec{\dot{ \mu }}(t), \nu) + \mathcal{N}(s_t; 0, \Sigma_{s_1}) =
 #       g_1 \left( \left[\begin{array}{c} \nu \\ 0 \\ -1 \end{array} \right]^T \cdot \vec{\mu}(t) \right) g_2 \left( \left[\begin{array}{c} 0 \\ 0 \\ 1 \end{array} \right]^T \cdot \vec{\mu}(t) \right)
 #       + \mathcal{N}(s_t; 0, \Sigma_{s_1})
 # $$
@@ -157,12 +174,18 @@ class GPSimple:
 # $$
 # ## Free Energy
 # $$
-# F \approx
-#   \frac{1}{2} \left[ \frac{(\dot{\mu_0}-\mu_1)^2}{\Sigma_{\mu_0}}
+# \begin{align}
+# F \approx& \frac{1}{2} \left[ \frac{(\dot{\mu_0}-\mu_1)^2}{\Sigma_{\mu_0}}
 #                       + \frac{(\dot{\mu_1}+ \omega^2 \mu_0)^2}{\Sigma_{\mu_1}}
 #                       + \frac{(\dot{\mu_2}-(\nu \mu_0 - \mu_2))^2}{\Sigma_{\mu_2}}
 #                       + \frac{(s_0-\mu_2)^2}{\Sigma_{s_0}}
-#                       + \frac{(s_1-g(\vec{\mu}, \nu))^2}{\Sigma_{s_1}} \right]
+#                       + \frac{(s_1-g(\vec{\mu}, \vec{\dot{\mu}},\nu))^2}{\Sigma_{s_1}} \right] \\
+#         =& \frac{1}{2} \left[ \frac{\varepsilon_{\mu_0}^2}{\Sigma_{\mu_0}}
+#                       + \frac{\varepsilon_{\mu_1}^2}{\Sigma_{\mu_1}}
+#                       + \frac{\varepsilon_{\mu_2}^2}{\Sigma_{\mu_2}}
+#                       + \frac{\varepsilon_{s_0}^2}{\Sigma_{s_0}}
+#                       + \frac{\varepsilon_{s_1}^2}{\Sigma_{s_1}} \right]
+# \end{align}
 # $$
 # ## Prediction errors
 # $$
@@ -171,18 +194,18 @@ class GPSimple:
 # \varepsilon_{\mu_1} &= \dot{\mu_1}+ \omega^2 \mu_0 \\
 # \varepsilon_{\mu_2} &= \dot{\mu_2}-(\nu \mu_0 - \mu_2) \\
 # \varepsilon_{s_0} &= s_0-\mu_2 \\
-# \varepsilon_{s_1} &= s_1-g(\vec{\mu}, \nu)
+# \varepsilon_{s_1} &= s_1-g(\vec{\mu}, \vec{\dot{\mu}}, \nu)
 # \end{align}
 # $$
 # ## Gradients
 # $$
 # \begin{align}
-# \frac{ \partial F }{ \partial \mu_0 } &= \omega^2 \frac{ \varepsilon_{\mu_1} }{ \Sigma_{\mu_1} } - \nu \frac{ \varepsilon_{\mu_2} }{ \Sigma_{\mu_2} } - \frac{ \partial g(\vec{\mu}, \nu) }{ \partial \mu_0 } \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} }\\
+# \frac{ \partial F }{ \partial \mu_0 } &= \omega^2 \frac{ \varepsilon_{\mu_1} }{ \Sigma_{\mu_1} } - \nu \frac{ \varepsilon_{\mu_2} }{ \Sigma_{\mu_2} } - \frac{ \partial g(\vec{\mu}, \vec{\dot{\mu}}, \nu) }{ \partial \mu_0 } \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} }\\
 # \frac{ \partial F }{ \partial \mu_1 } &= -\frac{ \varepsilon_{\mu_0} }{ \Sigma_{\mu_0} } \\
-# \frac{ \partial F }{ \partial \mu_2 } &= \frac{ \varepsilon_{\mu_2} }{ \Sigma_{\mu_2} } - \frac{ \varepsilon_{s_0} }{ \Sigma_{s_0} } - \frac{ \partial g(\vec{\mu}, \nu) }{ \partial \mu_2 } \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} }\\
+# \frac{ \partial F }{ \partial \mu_2 } &= \frac{ \varepsilon_{\mu_2} }{ \Sigma_{\mu_2} } - \frac{ \varepsilon_{s_0} }{ \Sigma_{s_0} } - \frac{ \partial g(\vec{\mu}, \vec{\dot{\mu}}, \nu) }{ \partial \mu_2 } \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} }\\
 # \frac{ \partial F }{ \partial \dot{\mu}_0 } &= \frac{ \varepsilon_{\mu_0} }{ \Sigma_{\mu_0} }\\
 # \frac{ \partial F }{ \partial \dot{\mu}_1 } &= \frac{ \varepsilon_{\mu_1} }{ \Sigma_{\mu_1} }\\
-# \frac{ \partial F }{ \partial \dot{\mu}_2 } &= \frac{ \varepsilon_{\mu_2} }{ \Sigma_{\mu_2} }
+# \frac{ \partial F }{ \partial \dot{\mu}_2 } &= \frac{ \varepsilon_{\mu_2} }{ \Sigma_{\mu_2} } - \frac{ \partial g(\vec{\mu}, \vec{\dot{\mu}}, \nu) }{ \partial \dot{\mu}_2 } \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} }
 # \end{align}
 # $$
 # ## Internal variables dynamics
@@ -239,9 +262,9 @@ class GM:
         # Vector \dot{\vec{\mu}}={\dot{\mu_0}, \dot{\mu_1}, \dot{\mu_2}} inizialized with the right ones
         self.dmu = np.array([0., -self.omega2, (self.nu*self.mu[0]-self.mu[2])])
         # Variances (inverse of precisions) of sensory input (the first one proprioceptive and the second one touch)
-        self.Sigma_s = np.array([0.005, 0.05])
+        self.Sigma_s = np.array([0.01, 0.1])
         # Internal variables precisions
-        self.Sigma_mu = np.array([0.01, 0.01, 0.005])
+        self.Sigma_mu = np.array([0.01, 0.01, 0.01])
         # Action variable (in this case the action is intended as the increment of the variable that the agent is allowed to modified)
         self.da = 0
         # Size of a simulation step
@@ -253,13 +276,22 @@ class GM:
     def g_touch(self, x, v, prec=50):
         return sech(prec*v)*(0.5*tanh(prec*x)+0.5)
 
-    # Derivative of the touch function with respect to \mu_0
-    def dg_dmu0(self, x, v, dv_dmu0, prec=50):
-        return prec*dv_dmu0*sech(prec*v)*tanh(prec*v)*(0.5 * tanh(prec*x) + 0.5)
+    # Derivative of the touch function with respect to v
+    def dg_dv(self, x, v, prec=50):
+        return -prec*sech(prec*v)*tanh(prec*v)*(0.5 * tanh(prec*x) + 0.5)
 
-    # Derivative of the touch function with respect to \mu_2
-    def dg_dmu2(self, x, v, prec=50, dx_dmu2=1, dv_dmu2=-1):
-        return -prec*dv_dmu2*sech(prec*v)*tanh(prec*v)*(0.5 * tanh(prec*x) + 0.5) + sech(prec*v)*5*dx_dmu2*(sech(prec*x))**2
+    # Derivative of the touch function with respect to x
+    def dg_dx(self, x, v, prec=50):
+        return sech(prec*v)*prec*0.5*(sech(prec*x))**2
+
+    # New touch function
+    def peak_touch(x, p=[15.,10000., 0.5]):
+        y = p[2]*(np.tanh(-x)+1)
+        return p[0]/(1 + p[1]*y**2)
+
+    def dPeak_dx(x, p=[15.,10000., 0.5]):
+        return ((1-tanh(x))*p[0]*p[1]*p[2]*(sech(x))**2)/(1+p[1]*p[2]**2*(1-tanh(x))**2)**2
+
 
     # Function that implement the update of internal variables.
     def update(self, sensory_states):
@@ -279,29 +311,30 @@ class GM:
         ])
         self.PE_s = np.array([
             self.s[0]-self.mu[2],
+            #self.s[1] - peak_touch(x=self.mu[2])
             self.s[1]-self.g_touch(x=self.mu[2], v=self.dmu[2])  # v=self.nu*self.mu[0]-self.mu[2] or v=self.dmu[2]?
         ])
 
         self.dF_dmu = np.array([
-            (self.omega2*self.PE_mu[1]/self.Sigma_mu[1] - self.nu*self.PE_mu[2]/self.Sigma_mu[2] \
-                - self.dg_dmu0(x=self.mu[2], v=self.dmu[2], dv_dmu0=self.nu)*self.PE_s[1]/self.Sigma_s[1]),
-            (-self.PE_mu[0]/self.Sigma_mu[0]),
+            self.omega2*self.PE_mu[1]/self.Sigma_mu[1] - self.nu*self.PE_mu[2]/self.Sigma_mu[2] \
+                - self.nu*self.dg_dv(x=self.mu[2], v=self.dmu[2])*self.PE_s[1]/self.Sigma_s[1],
+            -self.PE_mu[0]/self.Sigma_mu[0],
             self.PE_mu[2]/self.Sigma_mu[2] - self.PE_s[0]/self.Sigma_s[0] \
-                - self.dg_dmu2(x=self.mu[2], v=self.dmu[2])*self.PE_s[1]/self.Sigma_s[1]
+                - 0*self.dg_dx(x=self.mu[2], v=self.dmu[2])*self.PE_s[1]/self.Sigma_s[1]
         ])
 
         self.dF_d_dmu = np.array([
             self.PE_mu[0]/self.Sigma_mu[0],
             self.PE_mu[1]/self.Sigma_mu[1],
-            self.PE_mu[2]/self.Sigma_mu[2]
+            self.PE_mu[2]/self.Sigma_mu[2] - self.dg_dv(x=self.mu[2], v=self.dmu[2])*self.PE_s[1]/self.Sigma_s[1]
         ])
         # Action update
         #self.dF_da = np.array([ self.mu[0]*self.PE_s[0]/self.Sigma_s[0] , self.mu[0] * self.PE_s[1]/self.Sigma_s[1] ])
-        self.dF_da = np.array([ self.mu[0]*self.PE_s[0]/self.Sigma_s[0] , self.dg_dmu0(x=self.mu[0], v=self.dmu[2], dv_dmu0=self.mu[0])*self.PE_s[1]/self.Sigma_s[1] ]) #self.mu[0] * self.PE_s[1]/self.Sigma_s[1] ])
+        self.dF_da = np.array([ self.mu[0]*self.PE_s[0]/self.Sigma_s[0] , self.mu[0]*self.dg_dv(x=self.mu[0], v=self.dmu[2]) ]) #self.mu[0] * self.PE_s[1]/self.Sigma_s[1] ])
         self.da = -self.dt*eta_a*(0*self.dF_da[0] + self.dF_da[1])
 
         # Learning internal parameter nu
-        self.dF_dnu = np.array([-self.mu[0]*self.PE_mu[2]/self.Sigma_mu[2], -self.dg_dmu0(x=self.mu[0], v=self.dmu[2], dv_dmu0=self.mu[0])* self.PE_s[1]/self.Sigma_s[1] ])
+        self.dF_dnu = np.array([-self.mu[0]*self.PE_mu[2]/self.Sigma_mu[2], -self.dg_dv(x=self.mu[0], v=self.dmu[2]) ])
         #self.dF_dnu = np.array([-self.mu[0]*self.PE_mu[2]/self.Sigma_mu[2], -self.mu[0]* self.PE_s[1]/self.Sigma_s[1] ])
         #self.nu += -self.dt*eta_nu* (self.dF_dnu[0] + 0.001*self.dF_dnu[1])
 
@@ -317,7 +350,7 @@ class GM:
 
 
         # Efference copy
-        self.nu += self.da
+        #self.nu += self.da
 
         return self.da
 
@@ -328,7 +361,7 @@ if __name__ == "__main__":
     dt = 0.005
     n_steps = 20000+5000
     gp = GP(dt=dt, omega2_GP=0.5, alpha=1)
-    gm = GM(dt=dt, eta=0.008, eta_d=1., eta_a=0.1, eta_nu=0.01, omega2_GM=0.5, nu=1)
+    gm = GM(dt=dt, eta=0.001, eta_d=1., eta_a=0.1, eta_nu=0.01, omega2_GM=0.5, nu=1)
 
     data_GP = []
     data_GM = []
@@ -338,18 +371,18 @@ if __name__ == "__main__":
         gp.update(a)
         data_GP.append([gp.x[2], gp.a, gp.s[0], gp.s[1], gp.x[0]])
         data_GM.append([gm.mu[2], gm.nu, gm.PE_mu[0], gm.PE_mu[1], gm.PE_mu[2],
-                        gm.PE_s[0], gm.PE_s[1], gm.dmu[2], gm.mu[0], gm.dF_da[0], gm.dF_da[1] ])
+                        gm.PE_s[0], gm.PE_s[1], gm.dmu[2], gm.mu[0], gm.dF_da[0], gm.dF_da[1], peak_touch(gm.mu[2]), gm.g_touch(x=gm.mu[2], v=gm.dmu[2]) ])
     data_GP = np.vstack(data_GP)
     data_GM = np.vstack(data_GM)
     platform = gp.platform_for_graph()
     #%%
 
     plt.figure(figsize=(20, 10))
-    plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 0],
-             c="green", lw=2, ls="dashed", label=r"$\mu_2$")
-    plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 7],
-                      c="red", lw=2, ls="dashed", label=r"d$\mu_2$")
-    plt.plot(np.arange(0, n_steps*dt, dt), gm.g_touch(x=data_GM[:, 0], v=data_GM[:, 7]), label=r"touch")
+    plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 0], c="green", lw=2, ls="dashed", label=r"$\mu_2$")
+    plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 7], c="red", lw=2, ls="dashed", label=r"d$\mu_2$")
+    plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 11], c="purple", lw=2, ls="dashed", label=r"d$\mu_2$")
+    plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 12], c="grey", lw=2, ls="dashed", label=r"d$\mu_2$")
+    #plt.plot(np.arange(0, n_steps*dt, dt), gm.g_touch(x=data_GM[:, 0], v=data_GM[:, 7]), label=r"touch")
     #plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 1], c="#66aa66", lw=3, label=r"\nu")
     #plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 8], c="blue", lw=2, ls="dashed", label=r"$\mu_0$")
     #plt.plot(platform[:,0], platform[:,1], c="black", lw=2, label="platform")
@@ -361,7 +394,7 @@ if __name__ == "__main__":
     plt.figure(figsize=(20, 10))
     plt.subplot(211)
     plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 0], c="red", lw=2, ls="dashed", label=r"$x_2$")
-    #plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 4], c="blue", lw=2, 0.1*ls="dashed", label=r"$x_0$")
+    #plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 4], c="blue", lw=2, ls="dashed", label=r"$x_0$")
     plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 1], c="#aa6666", lw=4, label=r"\alpha")
     plt.plot(platform[:,0], platform[:,1], c="black", lw=2, label="platform")
     #plt.ylim(bottom=-1.8, top=4)
