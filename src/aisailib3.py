@@ -43,6 +43,8 @@ def tanh(x):
 # with $x_p$ platform position.
 
 #%%
+time =
+#%%
 # Generative process class
 class GenProc:
     def __init__(self):
