@@ -11,9 +11,13 @@ def tanh(x):
 
 
 # New touch function
-def peak_touch(x, p=15):
-    y = 0.5*(np.tanh(-x)+1)
-    return p/(1 + 1000*y**2)
+def peak_touch(x, p=[15.,10000., 0.5]):
+    y = p[2]*(np.tanh(-x)+1)
+    return p[0]/(1 + p[1]*y**2)
+
+def dPeak_dx(x, p=[15.,10000., 0.5]):
+    return ((1-tanh(x))*p[0]*p[1]*p[2]*(sech(x))**2)/(1+p[1]*p[2]**2*(1-tanh(x))**2)**2
+
 
 
 time = np.arange(0, 30, 0.01)
@@ -165,13 +169,13 @@ class GPSimple:
 # $$
 # with
 # $$
-# g_1(x) = \text{sech}(10x) = \frac{ 2 }{ e^{10 x} + e^{-10 x} } \\
-# g_2(x) = \frac{ 1 }{ 2 } \text{tanh}(10x) +\frac{ 1 }{ 2 } = \frac{ 1 }{ 2 } \left( \frac{ e^{10x}-e^{-10x} }{ e^{10x}+e^{-10x}  } + 1 \right)
+# g_1(\dot{\mu}_2) = \text{sech}(10 \dot{\mu}_2) = \frac{ 2 }{ e^{10 \dot{\mu}_2} + e^{-10 \dot{\mu}_2} } \\
+# g_2(\mu_2) = \frac{ 1 }{ 2 } (\text{tanh}(10 \mu_2) + 1)
 # $$
 # for later is important to notice that
 # $$
-# \frac{ d g_1 }{ dx } = -10 \text{sech}(10x) \text{tanh}(10x)\\
-# \frac{ d g_2 }{ dx } = 5 \text{sech}^2(10x)
+# \frac{ d g }{ d \dot{\mu}_2 } = -10 \text{sech}(10 \dot{\mu}_2) \text{tanh}(10 \dot{\mu}_2) \frac{ 1 }{ 2 } (\text{tanh}(10 \mu_2) + 1)\\
+# \frac{ d g }{ d \mu_2 } = 5 \text{sech}^2(10 \mu_2) \text{sech}(10 \dot{\mu}_2)
 # $$
 # ## Free Energy
 # $$
@@ -246,7 +250,7 @@ class GPSimple:
 # $$
 # with
 # $$
-# \frac{ \partial F }{ \partial \nu } = - \mu_0 \frac{ \varepsilon_{\mu_2} }{ \Sigma_{\mu_2} } - \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} }\frac{ \partial g(\vec{\mu}, \nu) }{ \partial \nu  } =
+# \frac{ \partial F }{ \partial \nu } = - \mu_0 \frac{ \varepsilon_{\mu_2} }{ \Sigma_{\mu_2} } - \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} }\frac{ \partial g(\mu_2, \dot{\mu}_2) }{ \partial \nu  } =
 #   - \mu_0 \frac{ \varepsilon_{\mu_2} }{ \Sigma_{\mu_2} } - \frac{ \varepsilon_{s_1} }{ \Sigma_{s_1} } \left[ -10 \, \mu_0 \, \text{sech}\left(10 (\nu \mu_0 - \mu_2)\right) \, \text{tanh}\left(10 (\nu \mu_0 - \mu_2)\right) \, \left( \frac{ 1 }{ 2 }\text{tanh}(10 \mu_2) + \frac{ 1 }{ 2 } \right) \right]
 # $$
 # %%
@@ -265,7 +269,7 @@ class GM:
         # Vector \dot{\vec{\mu}}={\dot{\mu_0}, \dot{\mu_1}, \dot{\mu_2}} inizialized with the right ones
         self.dmu = np.array([0., -self.omega2, (self.nu*self.mu[0]-self.mu[2])])
         # Variances (inverse of precisions) of sensory input (the first one proprioceptive and the second one touch)
-        self.Sigma_s = np.array([0.01, 0.1])
+        self.Sigma_s = np.array([0.01, 100.1])
         # Internal variables precisions
         self.Sigma_mu = np.array([0.01, 0.01, 0.01])
         # Action variable (in this case the action is intended as the increment of the variable that the agent is allowed to modified)
@@ -312,16 +316,15 @@ class GM:
         ])
         self.PE_s = np.array([
             self.s[0]-self.mu[2],
-            #self.s[1] - peak_touch(x=self.mu[2])
+            #self.s[1] - peak_touch(self.mu[2])
             self.s[1]-self.g_touch(x=self.mu[2], v=self.dmu[2])  # v=self.nu*self.mu[0]-self.mu[2] or v=self.dmu[2]?
         ])
 
         self.dF_dmu = np.array([
-            self.omega2*self.PE_mu[1]/self.Sigma_mu[1] - self.nu*self.PE_mu[2]/self.Sigma_mu[2] \
-                - self.nu*self.dg_dv(x=self.mu[2], v=self.dmu[2])*self.PE_s[1]/self.Sigma_s[1],
+            self.omega2*self.PE_mu[1]/self.Sigma_mu[1] - self.nu*self.PE_mu[2]/self.Sigma_mu[2],
             -self.PE_mu[0]/self.Sigma_mu[0],
             self.PE_mu[2]/self.Sigma_mu[2] - self.PE_s[0]/self.Sigma_s[0] \
-                - 0*self.dg_dx(x=self.mu[2], v=self.dmu[2])*self.PE_s[1]/self.Sigma_s[1]
+                - dg_dx(x=self.mu[2], v=self.dmu[2])*self.PE_s[1]/self.Sigma_s[1]
         ])
 
         self.dF_d_dmu = np.array([
@@ -331,12 +334,12 @@ class GM:
         ])
 
         # Action update
-        #self.dF_da = np.array([ self.mu[0]*self.PE_s[0]/self.Sigma_s[0] , self.mu[0] * self.PE_s[1]/self.Sigma_s[1] ])
-        self.dF_da = np.array([ self.mu[0]*self.PE_s[0]/self.Sigma_s[0] , self.mu[0]*self.dg_dv(x=self.mu[0], v=self.dmu[2])*self.PE_s[1]/self.Sigma_s[1] + self.mu[0]*self.dg_dx(x=self.mu[0], v=self.dmu[2])*self.PE_s[1]/self.Sigma_s[1] ]) #self.mu[0] * self.PE_s[1]/self.Sigma_s[1] ])
-        self.da = -self.dt*eta_a*(0.0*self.dF_da[0] + self.dF_da[1])
+        #self.dF_da = np.array([ self.mu[0]*self.PE_s[0]/self.Sigma_s[0] , self.mu[0]*dPeak_dx(self.mu[2])*self.PE_s[1]/self.Sigma_s[1] ])
+        self.dF_da = np.array([ 0*self.PE_s[0]/self.Sigma_s[0] , self.mu[0]*self.dg_dv(x=self.mu[2], v=self.dmu[2])*self.PE_s[1]/self.Sigma_s[1] + self.mu[2]*self.dg_dx(x=self.mu[0], v=self.dmu[2])*self.PE_s[1]/self.Sigma_s[1] ]) #self.mu[0] * self.PE_s[1]/self.Sigma_s[1] ])
+        self.da = -self.dt*eta_a*(self.dF_da[0] + self.dF_da[1])
 
         # Learning internal parameter nu
-        self.dF_dnu = np.array([-self.mu[0]*self.PE_mu[2]/self.Sigma_mu[2], -self.dg_dv(x=self.mu[0], v=self.dmu[2]) ])
+        #self.dF_dnu = np.array([-self.mu[0]*self.PE_mu[2]/self.Sigma_mu[2], -self.dg_dv(x=self.mu[0], v=self.dmu[2]) ])
         #self.dF_dnu = np.array([-self.mu[0]*self.PE_mu[2]/self.Sigma_mu[2], -self.mu[0]* self.PE_s[1]/self.Sigma_s[1] ])
         #self.nu += -self.dt*eta_nu* (self.dF_dnu[0] + 0.001*self.dF_dnu[1])
 
@@ -352,7 +355,7 @@ class GM:
 
 
         # Efference copy
-        self.nu += self.da
+        #self.nu += self.da
 
         return self.da
 
@@ -363,14 +366,14 @@ if __name__ == "__main__":
     dt = 0.005
     n_steps = 20000+5000
     gp = GP(dt=dt, omega2_GP=0.5, alpha=1)
-    gm = GM(dt=dt, eta=0.001, eta_d=1., eta_a=0.1, eta_nu=0.01, omega2_GM=0.5, nu=1)
+    gm = GM(dt=dt, eta=0.001, eta_d=1., eta_a=0.06, eta_nu=0.01, omega2_GM=0.5, nu=1)
 
     data_GP = []
     data_GM = []
     a = 0.
     for step in np.arange(n_steps):
         a = gm.update(gp.s)
-        gp.update(a)
+        gp.update(0)
         data_GP.append([gp.x[2], gp.a, gp.s[0], gp.s[1], gp.x[0]])
         data_GM.append([gm.mu[2], gm.nu, gm.PE_mu[0], gm.PE_mu[1], gm.PE_mu[2],
                         gm.PE_s[0], gm.PE_s[1], gm.dmu[2], gm.mu[0], gm.dF_da[0], gm.dF_da[1], peak_touch(gm.mu[2]), gm.g_touch(x=gm.mu[2], v=gm.dmu[2]) ])
