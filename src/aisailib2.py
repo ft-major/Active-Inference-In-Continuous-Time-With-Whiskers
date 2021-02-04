@@ -82,7 +82,7 @@ class GP:
         # Time interval in which the platform appears
         self.platform_interval = [15, 90]
 
-    def touch(self, x, platform_position, prec=100):
+    def touch(self, x, platform_position, prec=500):
         return 0.5 * tanh(prec*(x-platform_position)) + 0.5
 
     # Function that implement dynamics of the process.
@@ -113,44 +113,6 @@ class GP:
             if t in self.platform_interval:
                 plat.append([t, self.platform_position])
         return np.vstack(plat)
-
-# Generative Process Class
-class GPSimple:
-
-    def __init__(self, dt, omega2_GP=0.5, alpha=1):
-
-        # Harmonic oscillator angular frequency (both x_0 and x_2)
-        self.omega2 = omega2_GP
-        # Harmonic oscillator amplitude (no really)
-        self.a = alpha
-        # Vector x={x_0, x_1, x_2} initialized with his initial conditions
-        self.x = np.array([1., 0.,1/1.5])
-        # Array storing respectively proprioceptive sensory input (initialized with the real value x_2) and touch sensory input
-        self.s = np.array([self.a/(self.omega2 + 1), 0.])
-        # Variance of the Gaussian noise that gives proprioceptive sensory input
-        self.Sigma_s = 0.01
-        # Size of a simulation step
-        self.dt = dt
-        # Time variable
-        self.t = 0
-
-
-    # Function that implement dynamics of the process.
-    def update(self, action):
-        # Action argument (double) is the variable that comes from the GM that modifies alpha
-        # variable affecting the amplitude of the oscillation.
-
-        # Increment of time variable
-        self.t += self.dt
-        # Increment of alpha variable (that changes the amplitude) given by agent's action
-        self.a += action
-        # GP dynamics implementation
-        self.x[0] += self.dt*(self.x[1])
-        self.x[1] += self.dt*(-self.omega2*self.x[0])
-        self.x[2] += self.dt*(self.a*self.x[0] - self.x[2])
-
-        self.s[0] = self.x[2] + self.Sigma_s*rng.randn()
-
 
 # %% md
 # # Generative Model
@@ -269,7 +231,7 @@ class GM:
         # Vector \dot{\vec{\mu}}={\dot{\mu_0}, \dot{\mu_1}, \dot{\mu_2}} inizialized with the right ones
         self.dmu = np.array([0., -self.omega2, (self.nu*self.mu[0]-self.mu[2])])
         # Variances (inverse of precisions) of sensory input (the first one proprioceptive and the second one touch)
-        self.Sigma_s = np.array([1000000., 0.05])
+        self.Sigma_s = np.array([1.1, 0.05])
         # Internal variables precisions
         self.Sigma_mu = np.array([0.01, 0.01, 0.01])
         # Action variable (in this case the action is intended as the increment of the variable that the agent is allowed to modified)
@@ -316,15 +278,15 @@ class GM:
         ])
         self.PE_s = np.array([
             self.s[0]-self.mu[2],
-            self.s[1] - peak_touch(self.mu[2])
-            #self.s[1]-self.g_touch(x=self.mu[2], v=self.dmu[2])  # v=self.nu*self.mu[0]-self.mu[2] or v=self.dmu[2]?
+            #self.s[1] - peak_touch(self.mu[2])
+            self.s[1]-self.g_touch(x=self.mu[2], v=self.dmu[2])  # v=self.nu*self.mu[0]-self.mu[2] or v=self.dmu[2]?
         ])
 
         self.dF_dmu = np.array([
             self.omega2*self.PE_mu[1]/self.Sigma_mu[1] - self.nu*self.PE_mu[2]/self.Sigma_mu[2],
             -self.PE_mu[0]/self.Sigma_mu[0],
             self.PE_mu[2]/self.Sigma_mu[2] - self.PE_s[0]/self.Sigma_s[0] \
-                - dPeak_dx(self.mu[2])*self.PE_s[1]/self.Sigma_s[1]
+                - self.dg_dx(x=self.mu[2], v=self.dmu[2])*self.PE_s[1]/self.Sigma_s[1]
         ])
 
         self.dF_d_dmu = np.array([
@@ -334,7 +296,7 @@ class GM:
         ])
 
         # Action update
-        self.dF_da = np.array([ self.mu[0]*self.PE_s[0]/self.Sigma_s[0] , self.mu[0]*dPeak_dx(self.mu[2])*self.PE_s[1]/self.Sigma_s[1] ])
+        self.dF_da = np.array([ self.PE_s[0]/self.Sigma_s[0] , self.PE_s[1]/self.Sigma_s[1] ]) #self.mu[0]*dPeak_dx(self.mu[2])*self.PE_s[1]/self.Sigma_s[1] ])
         #self.dF_da = np.array([ 0*self.PE_s[0]/self.Sigma_s[0] , self.mu[0]*self.dg_dv(x=self.mu[2], v=self.dmu[2])*self.PE_s[1]/self.Sigma_s[1] ]) # + self.mu[2]*self.dg_dx(x=self.mu[0], v=self.dmu[2])*self.PE_s[1]/self.Sigma_s[1] ]) #self.mu[0] * self.PE_s[1]/self.Sigma_s[1] ])
         self.da = -self.dt*eta_a*(self.dF_da[0] + self.dF_da[1])
 
@@ -364,9 +326,9 @@ class GM:
 
 if __name__ == "__main__":
     dt = 0.005
-    n_steps = 25000+1200
+    n_steps = 25000
     gp = GP(dt=dt, omega2_GP=0.5, alpha=1)
-    gm = GM(dt=dt, eta=0.001, eta_d=2., eta_a=0.15, eta_nu=0.01, omega2_GM=0.5, nu=1)
+    gm = GM(dt=dt, eta=0.001, eta_d=2., eta_a=0.03, eta_nu=0.01, omega2_GM=0.5, nu=1)
 
     data_GP = []
     data_GM = []
