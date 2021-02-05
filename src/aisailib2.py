@@ -80,7 +80,7 @@ class GP:
         # Platform position (when is present) with respect to x_2 variable
         self.platform_position = 0.5
         # Time interval in which the platform appears
-        self.platform_interval = [15, 90]
+        self.platform_interval = [25, 100]
 
     def touch(self, x, platform_position, prec=500):
         return 0.5 * tanh(prec*(x-platform_position)) + 0.5
@@ -233,7 +233,7 @@ class GM:
         # Variances (inverse of precisions) of sensory input (the first one proprioceptive and the second one touch)
         self.Sigma_s = np.array([1.1, 0.05])
         # Internal variables precisions
-        self.Sigma_mu = np.array([0.01, 0.01, 0.01])
+        self.Sigma_mu = np.array([0.008, 0.008, 0.008])
         # Action variable (in this case the action is intended as the increment of the variable that the agent is allowed to modified)
         self.da = 0
         # Size of a simulation step
@@ -296,7 +296,7 @@ class GM:
         ])
 
         # Action update
-        self.dF_da = np.array([ self.PE_s[0]/self.Sigma_s[0] , self.PE_s[1]/self.Sigma_s[1] ]) #self.mu[0]*dPeak_dx(self.mu[2])*self.PE_s[1]/self.Sigma_s[1] ])
+        self.dF_da = np.array([ np.sign(self.mu[2])*self.PE_s[0]/self.Sigma_s[0] , self.PE_s[1]/self.Sigma_s[1] ]) #self.mu[0]*dPeak_dx(self.mu[2])*self.PE_s[1]/self.Sigma_s[1] ])
         #self.dF_da = np.array([ 0*self.PE_s[0]/self.Sigma_s[0] , self.mu[0]*self.dg_dv(x=self.mu[2], v=self.dmu[2])*self.PE_s[1]/self.Sigma_s[1] ]) # + self.mu[2]*self.dg_dx(x=self.mu[0], v=self.dmu[2])*self.PE_s[1]/self.Sigma_s[1] ]) #self.mu[0] * self.PE_s[1]/self.Sigma_s[1] ])
         self.da = -self.dt*eta_a*(self.dF_da[0] + self.dF_da[1])
 
@@ -315,9 +315,11 @@ class GM:
         #dF_da = (self.mu[0])*self.PE_s[0]/self.Sigma_s[0] + ( self.mu[0] ) * self.PE_s[1]/self.Sigma_s[1]
         #self.da = self.dt*eta_a*dF_da
 
-
         # Efference copy
-        self.nu += self.da
+        #self.nu += self.da
+
+        # Corollary discharge
+        self.nu += self.dt*eta_a*self.mu[0]*self.PE_s[1]/self.Sigma_s[1]#*self.dg_dv(x=self.mu[2], v=self.dmu[2])
 
         return self.da
 
@@ -338,28 +340,40 @@ if __name__ == "__main__":
         gp.update(a)
         data_GP.append([gp.x[2], gp.a, gp.s[0], gp.s[1], gp.x[0]])
         data_GM.append([gm.mu[2], gm.nu, gm.PE_mu[0], gm.PE_mu[1], gm.PE_mu[2],
-                        gm.PE_s[0], gm.PE_s[1], gm.dmu[2], gm.mu[0], gm.dF_da[0], gm.dF_da[1], peak_touch(gm.mu[2]), gm.g_touch(x=gm.mu[2], v=gm.dmu[2]) ])
+                        gm.PE_s[0], gm.PE_s[1], gm.dmu[2], gm.mu[0], gm.dF_da[0],
+                        gm.dF_da[1], peak_touch(gm.mu[2]), gm.g_touch(x=gm.mu[2], v=gm.dmu[2]), gm.dg_dv(gm.mu[2], gm.dmu[2]) ])
     data_GP = np.vstack(data_GP)
     data_GM = np.vstack(data_GM)
     platform = gp.platform_for_graph()
 
     # %%
-    plt.figure(figsize=(20, 10))
-    plt.subplot(211)
+    plt.figure(figsize=(16, 16))
+    plt.subplot(411)
     plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 0], c="red", lw=2, ls="dashed", label=r"$x_2$")
     #plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 4], c="blue", lw=2, ls="dashed", label=r"$x_0$")
-    plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 1], c="#aa6666", lw=4, label=r"\alpha")
     plt.plot(platform[:,0], platform[:,1], c="black", lw=2, label="platform")
     #plt.ylim(bottom=-1.8, top=4)
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-    plt.subplot(212)
+    plt.ylabel("a.u.")
+    plt.subplot(412)
     plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 0],
              c="green", lw=2, ls="dashed", label=r"$\mu_2$")
-    plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 1], c="#66aa66", lw=3, label=r"\nu")
+    #plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 1], c="#66aa66", lw=3, label=r"\nu")
     #plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 8], c="blue", lw=2, ls="dashed", label=r"$\mu_0$")
     plt.plot(platform[:,0], platform[:,1], c="black", lw=2, label="platform")
     #plt.ylim(bottom=-1.8, top=4)
+    plt.ylabel("a.u.")
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    plt.subplot(413)
+    plt.plot(np.arange(0, n_steps*dt, dt), -gm.eta[2]*data_GM[:, 10], c = "orange", label=r"$\dot{a}$")
+    plt.ylabel("a.u.")
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    plt.subplot(414)
+    plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 1], c="#aa6666", lw=4, label=r"\alpha")
+    plt.xlabel(r"time ($10^{-2}s$)")
+    plt.ylabel("a.u.")
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    plt.savefig("simulation_results")
     plt.show()
 
     # %%
@@ -402,22 +416,32 @@ if __name__ == "__main__":
     #%%
     plt.figure(figsize=(20, 10))
     #plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 9], label=r"$\frac{ 1 }{ \Sigma_{s_0} } \, \frac{ d\varepsilon_{s_0} }{ da }$")
-    plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 10], c = "orange", label=r"$\frac{ 1 }{ \Sigma_{s_1} } \, \frac{ d\varepsilon_{s_1} }{ da }$")
+    plt.plot(np.arange(0, n_steps*dt, dt), gm.eta[2]*data_GM[:, 10], c = "orange", label=r"$\frac{ 1 }{ \Sigma_{s_1} } \, \frac{ d\varepsilon_{s_1} }{ da }$")
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
     # %%
-    plt.figure(figsize=(12, 8))
+    plt.figure(figsize=(10, 5))
     plt.subplot(211)
-    plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 0], c="red", lw=1, ls="dashed", label=r"$x_2$")
-    plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 1], c="#aa6666", lw=3, label=r"\alpha")
-    plt.plot(platform[:,0], platform[:,1], c="black", lw=0.5, label="platform")
-    # plt.ylim(bottom=0)
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-    plt.subplot(212)
     plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 2], label="Proprioceptive sensory input")
     plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 3], label="Touch sensory input")
     #plt.plot(platform[:,0], platform[:,1], c="black", lw=0.5, label="platform")
     # plt.ylim(bottom=0)
+    plt.plot(platform[:,0], platform[:,1], c="black", lw=2, label="platform")
+    plt.ylabel("a.u.")
+    plt.xlabel(r"time ($10^{-2}s$)")
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    plt.subplot(212)
+    plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 5], label=r"$PE_{s_0}$")
+    plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 6], label=r"$PE_{s_1}$")
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    plt.savefig("sensory_inputs")
+    plt.show()
+
+    #%%
+
+    plt.figure(figsize=(10, 5))
+    plt.plot(data_GM[:200, 0], data_GP[:200, 2], label="Proprioceptive sensory input")
+    plt.xlabel(r"time ($10^{-2}s$)")
+    plt.legend()
     plt.show()
 
     # %%
@@ -433,13 +457,11 @@ if __name__ == "__main__":
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
     plt.show()
     # %%
-    plt.figure(figsize=(12, 8))
-    plt.subplot(211)
-    plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 5], label=r"$PE_{s 0}$")
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-    plt.subplot(212)
-    plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 6], label=r"$PE_{s 1}$")
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    plt.figure(figsize=(10, 5))
+    plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 6], label="Touch prediction error", c='#ff7f0e')
+    plt.xlabel(r"time ($10^{-2}s$)")
+    plt.legend()
+    plt.savefig("touch_PE")
     plt.show()
     #%%
 
