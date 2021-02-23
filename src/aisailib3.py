@@ -18,17 +18,11 @@ def tanh(x):
 # $$
 #   \dot{\vec{x}}(t) = f(\vec{x}(t), \alpha) =
 #       \left[\begin{array}{cc} 0 & 1 \\ -\omega^2 & 0 \end{array}\right] \cdot \vec{x}(t) =
-#       \left[\begin{array}{c} x_1(t) \\ -\omega^2 x_0(t) \end{array}\right] \nonumber
+#       \left[\begin{array}{c} x_1(t) \\ -\omega^2 x_0(t) + u \, \text{tanh}(a) x_1(t) \end{array}\right] \nonumber
 # $$
 # ## Initial conditions
 # $$
 # \vec{x}(0) = \left[ \begin{array}{c} x_0(0) \\ x_1(0) \end{array} \right] = \left[ \begin{array}{c} 1 \\ 0 \end{array} \right]
-# $$
-# ## Solution (Without action)
-# $$
-# \vec{x}(t) =
-#   \left[ \begin{array}{c} x_0(t) \\ x_1(t) \end{array} \right] =
-#   \left[ \begin{array}{c} \cos(\omega t) \\ - \omega \sin(\omega t) \end{array} \right]
 # $$
 #
 # From $x_0$ is extracted the proprioceptive sensory input
@@ -36,46 +30,45 @@ def tanh(x):
 # s_0 (t) = x_0(t) + \mathcal{N}(s_0;0,\Sigma_{s_0}^{GP})
 # $$
 # If the whisker is stopped by the platform the touch sensory input is set equal to 1 ($s_1=0$ otherwise)
-# and and the proprioceptie sensory input is set to
-# $$
-# s_0 (t) = x_p(t) + \mathcal{N}(s_0;0,\Sigma_{s_0}^{GP})
-# $$
-# with $x_p$ platform position.
 
-#%%
-time =
 #%%
 # Generative process class
 class GenProc:
-    def __init__(self):
+    def __init__(self, dt, omega2_GP=0.5):
 
         # Generative process parameters
 
         # Generative process s variance
-        self.SigmaGP_s = 0.1
+        self.Sigma_s = 0.1
         # Two dimensional array storing angle and angle velocity initialized with his initial conditions
         self.x = np.array([1., 0.])
         # Harmonic oscillator angular frequency square (omega^2)
-        self.omega2 = 0.5
+        self.omega2 = omega2_GP
         # Costant that quantify the amount of energy (friction?) that the agent can insert in the system
         self.u = 0.5
         # Array storing respectively proprioceptive sensory input (initialized with the real value x_0) and touch sensory input
         self.s = np.array([1, 0.])
+        # Size of a simulation step
+        self.dt = dt
+        # Time variable
+        self.t = 0
         # Platform position (when is present) with respect to x_0 variable
         self.platform_position = 0.5
         # Time interval in which the platform appears
-        self.platform_interval = [15, 75]
-
+        self.platform_interval = [15, 90]
 
     # Step of generative process dynamic
-    def dynamic(self, dt, t, action):
+    def update(self, action):
+        # Increment of time variable
+        self.t += self.dt
+        # GP dynamics implementation
         self.x[0] += self.x[1]*dt
-        self.x[1] += -self.omega2*self.x[0]*dt - self.u*np.tanh(action)*dt#*self.x2
+        self.x[1] += -self.omega2*self.x[0]*dt + self.u*np.tanh(action)*dt*self.x[1]
 
     # Funciton that create agent's sensory input (two dimensional array)
-    def genS(self, t):
+    def genS(self):
         # Platform Action
-        if t > self.platform_interval[0] and t < self.platform_interval[1]:
+        if self.t > self.platform_interval[0] and self.t < self.platform_interval[1]:
             if self.x[0] > self.platform_position:
                 self.s[1] = 1.
                 self.s[0] = self.platform_position
@@ -188,30 +181,30 @@ class GenProc:
 #%%
 # Generative model class
 class GenMod:
-    def __init__(self):
+    def __init__(self, dt, omega2_GM=0.5, k_mu=0.001, k_dmu=0.1, k_a=0.1):
 
         # Generative process parameters
 
         # Harmonic oscillator angular frequency (omega^2). We're assuming is equal to the one of the GP
-        self.omega2 = 0.5
+        self.omega2 = omega2_GM
         # Vector \vec{\mu}={\mu_0, \mu_1} initialized with the GP initial conditions
         self.mu = np.array([1., 0.])
         # Vector \dot{\vec{\mu}}={\dot{\mu_0}, \dot{\mu_1}} inizialized with the right ones
         self.dmu = np.array([0., -self.omega2])
         # Internal variables precisions
         self.Sigma_mu = np.array([0.01, 0.01])
-        # Array storing respectively proprioceptive sensory input (initialized with the real value x_0) and touch sensory input
-        self.s = np.array([1, 0.])
         # Variances (inverse of precisions) of sensory input (the first one proprioceptive and the second one touch)
-        self.Sigma_s = np.array([0.01, 10000])
+        self.Sigma_s = np.array([0.01, 0.01])
         # Action variable
         self.a = 0
         # Costant that quantify the amount of energy (friction?) that the agent can insert in the system. In this case we're assuming is the same as the one of the GP
         self.u = 0.5
-        # Gradient descent inference parameter
-        self.k_mu = 0.1
+        # Gradient descent inference parameters
+        self.k_mu = k_mu
+        self.k_dmu = k_dmu
         # Gradient descent action parameter
-        self.k_a = 0.1
+        self.k_a = k_a
+        self.dt =dt
 
     # Touch function
     def g_touch(self, x, v, prec=10):
@@ -253,41 +246,65 @@ class GenMod:
             self.PE_mu[1]/self.Sigma_mu[1]
         ])
 
-        dF_da = (self.mu[0]-self.mu[1])/(self.omega2+1)*self.PE_s[0]/self.Sigma_s[0] + \
-        (self.dg_dmu0(x=self.mu[2], v=(self.nu*self.mu[0]-self.mu[2]), dv_dmu0=self.mu[0])) * self.PE_s[1]/self.Sigma_s[1]
 
-        # Learning internal parameter nu
-        dF_dnu = -self.mu[0]*self.PE_mu[2]/self.Sigma_mu[2] \
-        -(self.dg_dmu0(x=self.mu[2], v=(self.nu*self.mu[0]-self.mu[2]), dv_dmu0=self.mu[0])) * self.PE_s[1]/self.Sigma_s[1]
+        # Action update
+        # case with dg/da = 1
+        self.a = -self.dt*self.k_a*self.PE_s[1]/self.Sigma_s[1]
+        # case with real dg/da
+        #self.da = -self.dt*self.k_a*x*self.dg_dv(x=self.mu, v=self.dmu)*self.PE_s[1]/self.Sigma_s[1]
 
         # Internal variables update
-        self.mu += self.dt*(self.dmu - eta*self.dF_dmu)
-        self.dmu += -self.dt*eta_d*self.dF_d_dmu
+        self.mu += self.dt*(self.dmu - self.k_mu*self.dF_dmu)
+        self.dmu += -self.dt*self.k_dmu*self.dF_d_dmu
 
-        self.da = -self.dt*eta_a*dF_da
-        #self.nu += -self.dt*eta_nu*dF_dnu
+        return self.a
 
-
-
-    def update(self, dt, s):
-        epsilon_s = s - self.mu[0]
-        epsilon_mu2 = self.mu[2] + self.omega2*self.mu[0]
-        dFdmu0 = ( - self.omega2*epsilon_mu2/self.Sigma_mu2 - epsilon_s/self.Sigma_s)
-        dFdmu1 = 0
-        dFdmu2 = ( epsilon_mu2/self.Sigma_mu2 )
-        dFds = (epsilon_s/self.Sigma_s)
-        dsda = (self.mu[1]**2*self.u*np.cosh(self.a)**(-2)/self.mu[2])
-        dFda = ( dFds*dsda )
-        self.mu[0] += dt*self.mu[1] - self.k_mu*dFdmu0
-        self.mu[1] += dt*self.mu[2] - self.k_mu*dFdmu1
-        self.mu[2] += -self.k_mu*dFdmu2
-        self.a += -self.k_a*dFda
-
+#%%
 if __name__ == "__main__":
-    rng = np.random.RandomState(42)
-    dt=0.05
-    gp = GenProc(x=[1,0], rng=rng)
-    gm = GenMod(mu=[1,0,-1], rng=rng)
+    dt=0.005
+    n_steps = 20000+5000
+    gp = GenProc(dt=dt, omega2_GP=0.5)
+    gm = GenMod(dt=dt, k_mu=0.01, k_dmu=0.1, k_a=2, omega2_GM=0.5)
+
+    data_GP = []
+    data_GM = []
+    a = 0.
+    for step in np.arange(n_steps):
+        a = gm.update(gp.genS())
+        gp.update(a)
+        data_GP.append([gp.x[0], gp.u*np.tanh(a)*dt*gp.x[1], gp.s[0], gp.s[1], 0])
+        data_GM.append([gm.mu[0], 0, 0, 0, gm.PE_mu[0],
+                        gm.PE_s[0], gm.PE_s[1], gm.dmu[0], 0, 0, 0, 0, gm.g_touch(x=gm.mu[0], v=gm.mu[1]) ])
+    data_GP = np.vstack(data_GP)
+    data_GM = np.vstack(data_GM)
+    platform = gp.platform_for_graph()
+
+    # %%
+    plt.figure(figsize=(20, 10))
+    plt.subplot(211)
+    plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 0], c="red", lw=2, ls="dashed", label=r"$x_2$")
+    #plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 4], c="blue", lw=2, ls="dashed", label=r"$x_0$")
+    #plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 1], c="#aa6666", lw=4, label=r"\alpha")
+    plt.plot(platform[:,0], platform[:,1], c="black", lw=2, label="platform")
+    #plt.ylim(bottom=-1, top=1.25)
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    plt.subplot(212)
+    plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 0], c="green", lw=2, ls="dashed", label=r"$\mu_2$")
+    #plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 1], c="#66aa66", lw=3, label=r"\nu")
+    #plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 8], c="blue", lw=2, ls="dashed", label=r"$\mu_0$")
+    #plt.ylim(bottom=-1, top=1.25)
+    plt.plot(platform[:,0], platform[:,1], c="black", lw=2, label="platform")
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    plt.show()
+
+    #%%
+    plt.figure(figsize=(20, 10))
+    plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 1], c="blue", lw=2, label="action")
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    plt.show()
+
+
+    #%%
     data = []
     data.append([gp.x[0], gp.genS(), gm.a, np.sqrt(gp.x[0]**2 + (gp.x[1]/gp.omega2)**2), gm.mu[0]])
     stime = 5000
