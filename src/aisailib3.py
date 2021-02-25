@@ -55,7 +55,7 @@ class GenProc:
         # Platform position (when is present) with respect to x_0 variable
         self.platform_position = 0.5
         # Time interval in which the platform appears
-        self.platform_interval = [15, 90]
+        self.platform_interval = [30, 100]
 
     # Step of generative process dynamic
     def update(self, action):
@@ -264,7 +264,7 @@ if __name__ == "__main__":
     dt=0.005
     n_steps = 20000+5000
     gp = GenProc(dt=dt, omega2_GP=0.5)
-    gm = GenMod(dt=dt, k_mu=0.01, k_dmu=0.1, k_a=2, omega2_GM=0.5)
+    gm = GenMod(dt=dt, k_mu=0.01, k_dmu=0.1, k_a=3, omega2_GM=0.5)
 
     data_GP = []
     data_GM = []
