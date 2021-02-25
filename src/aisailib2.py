@@ -83,7 +83,7 @@ class GM:
         # Vector \dot{\vec{\mu}}={\dot{\mu_0}, \dot{\mu_1}, \dot{\mu_2}} inizialized with the right ones
         self.dmu = (self.nu*x-self.mu)
         # Variances (inverse of precisions) of sensory input (the first one proprioceptive and the second one touch)
-        self.Sigma_s = np.array([0.01, 0.1])
+        self.Sigma_s = np.array([0.0001, 0.1])
         # Internal variables precisions
         self.Sigma_mu = 0.01
         # Action variable (in this case the action is intended as the increment of the variable that the agent is allowed to modified)
@@ -133,7 +133,8 @@ class GM:
         #self.da = -self.dt*eta_a*x*self.dg_dv(x=self.mu, v=self.dmu)*self.PE_s[1]/self.Sigma_s[1]
 
         # Learning internal parameter nu
-        self.nu += -self.dt*eta_nu*(-0*x*self.PE_mu/self.Sigma_mu - x*self.dg_dv(x=self.mu, v=self.dmu)*self.PE_s[1]/self.Sigma_s[1])
+        self.nu += -self.dt*eta_nu*(-
+        x*self.PE_mu/self.Sigma_mu - 0*x*self.dg_dv(x=self.mu, v=self.dmu)*self.PE_s[1]/self.Sigma_s[1])
 
         self.mu += self.dt*(self.dmu - eta*self.dF_dmu)
         self.dmu += -self.dt*eta_d*self.dF_d_dmu
