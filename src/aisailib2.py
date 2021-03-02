@@ -23,7 +23,7 @@ class GP:
         # Vector x={x_0, x_1, x_2} initialized with his initial conditions
         self.x = np.array([1., 0.,alpha/(omega2_GP+1)])
         # Array storing respectively proprioceptive sensory input (initialized with the real value x_2) and touch sensory input
-        self.s = np.array([self.a/(self.omega2 + 1), 0.])
+        self.s = np.array([self.a/(self.omega2 + 1), 0., (self.a*self.x[0]-self.x[2]) ])
         # Variance of the Gaussian noise that gives proprioceptive sensory input
         self.Sigma_s = 0.1
         # Size of a simulation step
@@ -35,7 +35,12 @@ class GP:
         # Time interval in which the platform appears
         self.platform_interval = [15, 90]
 
-    def touch(self, x, platform_position, prec=100):
+    def touch(self, x, platform_position):
+        if x>=platform_position:
+            return 1
+        else:
+            return 0
+    def touch_cont(self, x, platform_position, prec=100):
         return 0.5 * (tanh(prec*(x-platform_position)) + 1)
 
     # Function that implement dynamics of the process.
@@ -59,6 +64,7 @@ class GP:
         else:
             self.s[1] = 0.
         self.s[0] = self.x[2] + self.Sigma_s*rng.randn()
+        self.s[2] = self.a*self.x[0] - self.x[2] + self.Sigma_s*rng.randn()
 
     def platform_for_graph(self):
         plat = []
@@ -83,7 +89,7 @@ class GM:
         # Vector \dot{\vec{\mu}}={\dot{\mu_0}, \dot{\mu_1}, \dot{\mu_2}} inizialized with the right ones
         self.dmu = (self.nu*x-self.mu)
         # Variances (inverse of precisions) of sensory input (the first one proprioceptive and the second one touch)
-        self.Sigma_s = np.array([0.0001, 0.1])
+        self.Sigma_s = np.array([0.01, 0.1, 0.01])
         # Internal variables precisions
         self.Sigma_mu = 0.01
         # Action variable (in this case the action is intended as the increment of the variable that the agent is allowed to modified)
@@ -119,22 +125,22 @@ class GM:
 
         self.PE_s = np.array([
             self.s[0]-self.mu,
-            self.s[1]-self.g_touch(x=self.mu, v=self.dmu)
+            self.s[1]-self.g_touch(x=self.mu, v=self.dmu),
+            self.s[2]-self.dmu
         ])
 
         self.dF_dmu = self.PE_mu/self.Sigma_mu - self.PE_s[0]/self.Sigma_s[0] - self.dg_dx(x=self.mu, v=self.dmu)*self.PE_s[1]/self.Sigma_s[1]
 
-        self.dF_d_dmu = self.PE_mu/self.Sigma_mu - self.dg_dv(x=self.mu, v=self.dmu)*self.PE_s[1]/self.Sigma_s[1]
+        self.dF_d_dmu = self.PE_mu/self.Sigma_mu - self.PE_s[2]/self.Sigma_s[2] - self.dg_dv(x=self.mu, v=self.dmu)*self.PE_s[1]/self.Sigma_s[1]
 
         # Action update
         # case with dg/da = 1
-        self.da = -self.dt*eta_a*self.PE_s[1]/self.Sigma_s[1]
+        self.da = -self.dt*eta_a*( self.PE_s[1]/self.Sigma_s[1] + 0*self.PE_s[2]/self.Sigma_s[2] )
         # case with real dg/da
         #self.da = -self.dt*eta_a*x*self.dg_dv(x=self.mu, v=self.dmu)*self.PE_s[1]/self.Sigma_s[1]
 
         # Learning internal parameter nu
-        self.nu += -self.dt*eta_nu*(-
-        x*self.PE_mu/self.Sigma_mu - 0*x*self.dg_dv(x=self.mu, v=self.dmu)*self.PE_s[1]/self.Sigma_s[1])
+        self.nu += -self.dt*eta_nu*(-x*self.PE_mu/self.Sigma_mu - 0*x*self.dg_dv(x=self.mu, v=self.dmu)*self.PE_s[1]/self.Sigma_s[1])
 
         self.mu += self.dt*(self.dmu - eta*self.dF_dmu)
         self.dmu += -self.dt*eta_d*self.dF_d_dmu
@@ -263,46 +269,3 @@ if __name__ == "__main__":
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
     plt.show()
     #%%
-
-
-    # %% Testing touch function
-    gm = GM(dt=0.005)
-    omega = np.sqrt(gm.omega2)
-    nu = 0.5 # gm.nu
-    time = np.arange(0, 30, 0.001)
-    x0 = np.cos(omega*time)
-    x1 = -omega*np.sin(omega*time)
-    x2 = nu*(np.cos(omega*time)+omega*np.sin(omega*time))/(omega**2+1)
-    dx2 = nu*(-np.sin(omega*time)+omega**2*np.cos(omega*time))/(omega**2+1)
-    touch = gm.g_touch(x=x2, v=dx2)
-    #dtouch_dx0 = gm.dg_dmu0(x=x2, v=dx2, dv_dmu0=nu)
-    dtouch_dnu = x2*gm.dg_dv(x=x2, v=dx2) + x2*gm.dg_dx(x=x2, v=dx2)
-
-    plt.figure(figsize=(12, 8))
-    plt.subplot(211)
-    plt.plot(time, x0, label=r"$x_0$", c='#1f77b4')
-    plt.plot(time, x2, label=r"$x_2$", c='#ff7f0e')
-    #plt.plot(time, touch, label=r"touch function $g$", c='#9467bd')
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-    plt.subplot(212)
-    plt.plot(time, x1, label=r"$x_1$", c='#2ca02c')
-    plt.plot(time, dx2, label=r"$\frac{dx_2}{dt}$", c='#d62728')
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-    plt.show()
-
-    # %%
-    plt.figure(figsize=(12, 8))
-    plt.subplot(211)
-    plt.plot(time, x2, label=r"$x_2$", c='#ff7f0e')
-    plt.plot(time, touch, label=r"touch function $g$", c='#9467bd')
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-    plt.plot(time, x0, label=r"$x_0$", c='#1f77b4')
-    #plt.plot(time, dtouch_dx0, label=r"$\frac{dg}{dx_0}$", c='#8c564b')
-    # plt.plot(time, dtouch_dx2, label=r"$\frac{dg}{dx_2}$", c='#7f7f7f')
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-    plt.plot(time, x2, label=r"$x_2$", c='#ff7f0e')
-    plt.subplot(212)
-    plt.plot(time, 2*dtouch_dx2, label=r"$\frac{dg}{dx_2}$", c='#7f7f7f')
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-    #plt.xlim([0,4])
-    plt.show()
