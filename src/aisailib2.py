@@ -61,10 +61,13 @@ class GP:
             self.s[1] = self.touch(self.x[2], self.platform_position)
             if self.x[2]>self.platform_position:
                 self.x[2] = self.platform_position
+                self.s[2] = 0 + self.Sigma_s*rng.randn()
+            else:
+                self.s[2] = self.a*self.x[0] - self.x[2] + self.Sigma_s*rng.randn()
         else:
             self.s[1] = 0.
+            self.s[2] = self.a*self.x[0] - self.x[2] + self.Sigma_s*rng.randn()
         self.s[0] = self.x[2] + self.Sigma_s*rng.randn()
-        self.s[2] = self.a*self.x[0] - self.x[2] + self.Sigma_s*rng.randn()
 
     def platform_for_graph(self):
         plat = []
@@ -89,7 +92,7 @@ class GM:
         # Vector \dot{\vec{\mu}}={\dot{\mu_0}, \dot{\mu_1}, \dot{\mu_2}} inizialized with the right ones
         self.dmu = (self.nu*x-self.mu)
         # Variances (inverse of precisions) of sensory input (the first one proprioceptive and the second one touch)
-        self.Sigma_s = np.array([10000.01, 0.1, 0.01])
+        self.Sigma_s = np.array([10000.01, 0.07, 0.01])
         # Internal variables precisions
         self.Sigma_mu = 0.01
         # Action variable (in this case the action is intended as the increment of the variable that the agent is allowed to modified)
@@ -178,16 +181,17 @@ if __name__ == "__main__":
     #plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 4], c="blue", lw=2, ls="dashed", label=r"$x_0$")
     plt.plot(np.arange(0, n_steps*dt, dt), data_GP[:, 1], c="#aa6666", lw=4, label=r"\alpha")
     plt.plot(platform[:,0], platform[:,1], c="black", lw=2, label="platform")
-    plt.ylim(bottom=-1, top=1.25)
+    plt.ylim(bottom=-1, top=1.40)
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
     plt.subplot(212)
     plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 0],
     c="green", lw=2, ls="dashed", label=r"$\mu_2$")
     plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 1], c="#66aa66", lw=3, label=r"\nu")
     #plt.plot(np.arange(0, n_steps*dt, dt), data_GM[:, 8], c="blue", lw=2, ls="dashed", label=r"$\mu_0$")
-    plt.ylim(bottom=-1, top=1.25)
+    plt.ylim(bottom=-1, top=1.40)
     plt.plot(platform[:,0], platform[:,1], c="black", lw=2, label="platform")
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    plt.savefig("simulation_results1")
     plt.show()
 
     #%%
